@@ -1,10 +1,10 @@
 {
-    "name": "ChargesTBA",
+    "name": "@upradata/charges-copropriete",
     "version": "1.0.0",
     "description": "",
     "keywords": [],
     "license": "ISC",
-    "author": "",
+    "author": "El Pupi",
     "type": "module",
     "scripts": {
         "build": "tsc --project tsconfig.json && node scripts/copy-manifest.mjs",
