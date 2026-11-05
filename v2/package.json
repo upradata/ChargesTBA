@@ -1,13 +1,23 @@
 {
     "name": "@upradata/charges-copropriete-v2",
     "version": "0.1.0",
-    "private": true,
+    "description": "Formula-driven co-ownership charges and payments tracker for Google Sheets",
     "license": "ISC",
     "author": "El Pupi",
+    "private": true,
     "type": "module",
     "scripts": {
-        "build": "echo \"v2 not implemented yet\"",
-        "test": "echo \"v2 not implemented yet\"",
-        "typecheck": "echo \"v2 not implemented yet\""
+        "build": "tsc --project tsconfig.json && node scripts/copy-manifest.mjs",
+        "deploy": "pnpm build && clasp push",
+        "login": "clasp login",
+        "pull": "clasp pull",
+        "push": "pnpm build && clasp push",
+        "test": "pnpm build && node --test",
+        "typecheck": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@google/clasp": "^3.4.1",
+        "@types/google-apps-script": "^2.0.14",
+        "typescript": "^7.0.2"
     }
 }

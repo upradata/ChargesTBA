@@ -191,7 +191,17 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
-  v2: {}
+  v2:
+    devDependencies:
+      '@google/clasp':
+        specifier: ^3.4.1
+        version: 3.4.1(@types/node@20.19.43)(supports-color@7.2.0)
+      '@types/google-apps-script':
+        specifier: ^2.0.14
+        version: 2.0.15
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
 packages:
 
