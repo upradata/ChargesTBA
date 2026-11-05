@@ -3,13 +3,10 @@
         "target": "ES2019",
         "module": "ESNext",
         "moduleDetection": "legacy",
-        "outDir": "dist",
-        "rootDir": "src",
         "types": ["google-apps-script"],
         "strict": true,
         "noEmitOnError": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
-    },
-    "include": ["src/**/*.ts"]
+    }
 }

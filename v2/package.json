@@ -1,0 +1,13 @@
+{
+    "name": "@upradata/charges-copropriete-v2",
+    "version": "0.1.0",
+    "private": true,
+    "license": "ISC",
+    "author": "El Pupi",
+    "type": "module",
+    "scripts": {
+        "build": "echo \"v2 not implemented yet\"",
+        "test": "echo \"v2 not implemented yet\"",
+        "typecheck": "echo \"v2 not implemented yet\""
+    }
+}

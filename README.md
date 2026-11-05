@@ -1,38 +1,24 @@
 # ChargesTBA
 
-Google Apps Script (TypeScript) automation for managing co-ownership charges and payments in a Google Sheets table.
+pnpm workspace for co-ownership charges and payments tracking in Google Sheets.
 
-## Stack
+| Package    | Description                                                   |
+| ---------- | ------------------------------------------------------------- |
+| [v1](./v1) | Apps Script `onEdit` automation (current production)          |
+| [v2](./v2) | Formula-driven rewrite (payments, charges, allocations) — WIP |
 
-- TypeScript compiled to Apps Script, deployed with [clasp](https://github.com/google/clasp)
-- pnpm, oxlint, oxfmt
-- Node test runner
+## Commands (from the root)
 
-## Scripts
+| Command          | Description                        |
+| ---------------- | ---------------------------------- |
+| `pnpm install`   | Install all workspace dependencies |
+| `pnpm build`     | Build every package                |
+| `pnpm test`      | Run every package's tests          |
+| `pnpm typecheck` | Type-check every package           |
+| `pnpm lint`      | Lint the whole repository          |
+| `pnpm format`    | Format the whole repository        |
 
-| Command          | Description                      |
-| ---------------- | -------------------------------- |
-| `pnpm build`     | Compile and copy the manifest    |
-| `pnpm test`      | Build and run tests              |
-| `pnpm typecheck` | Type-check without emitting      |
-| `pnpm lint`      | Lint with oxlint                 |
-| `pnpm format`    | Format with oxfmt                |
-| `pnpm login`     | Authenticate clasp               |
-| `pnpm push`      | Build and push to Apps Script    |
-| `pnpm deploy`    | Build, push and deploy           |
-
-## Structure
-
-- `src/` – Apps Script sources (`Code.ts`, `Utils.ts`)
-- `tests/` – unit tests for the table logic
-- `scripts/` – build helpers
-- `docs/codebase/` – codebase documentation
-
-## Notes
-
-The sheet table is loaded in memory, edited, then written back in one pass to minimize Apps Script calls.
-
-For temporary performance diagnostics, set `PERFORMANCE_TIMING_ENABLED` to `true` in `src/Code.ts`, run `pnpm push`, then inspect the Apps Script execution logs after editing a cell. Set it back to `false` and push again after measuring. Timings cover server-side execution, not the Sheets client repaint.
+Package-specific commands (`push`, `deploy`, …) run from the package directory, e.g. `pnpm --filter ./v1 push`.
 
 ## License
 
