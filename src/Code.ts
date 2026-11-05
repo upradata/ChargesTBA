@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars -- Apps Script exposes symbols globally across script files. */
 // Définissez un drapeau global en haut de votre script principal
 let DEBUG_MODE: boolean = false; // Passez à true pendant vos phases de test/debug
+let PERFORMANCE_TIMING_ENABLED: boolean = false; // Enable temporarily without changing DEBUG_MODE behavior.
 
 // A=1 (Date), B=2 (Type), C=3 (Montant), D=4 (Nombre de paiements),
 // E=5 (Date paiement), F=6 (Somme), G=7 (Payé), H=8 (Remboursement effectué), I=9 (% Avancement)
@@ -67,28 +68,40 @@ const getA1 = (data: TableData, row: number, column: number): string =>
     `${columnToLetter(data.startCol + column - 1)}${data.startRow + row - 1}`;
 
 function refresh(range: GoogleAppsScript.Spreadsheet.Range): void | false {
-    const sheet = range.getSheet();
-    const { startRow: absoluteRow, startCol: absoluteColumn } = parseRangeA1(range.getA1Notation());
+    const timings: TimingEntry[] | null = PERFORMANCE_TIMING_ENABLED ? [] : null;
+    const startedAt = timings ? Date.now() : 0;
 
-    const table = getTableByName(sheet, TABLE_NAME);
+    try {
+        const { sheet, absoluteRow, absoluteColumn, table } = measureStage(timings, 'resolveTable', () => {
+            const sheet = range.getSheet();
+            const { startRow: absoluteRow, startCol: absoluteColumn } = parseRangeA1(range.getA1Notation());
+            const table = getTableByName(sheet, TABLE_NAME);
+            return { sheet, absoluteRow, absoluteColumn, table };
+        });
 
-    if (table.lastRow === table.startRow) return;
+        if (table.lastRow === table.startRow) return;
 
-    if (!isInTable(table, { row: absoluteRow, column: absoluteColumn })) return false; // current cell not in table
+        if (!isInTable(table, { row: absoluteRow, column: absoluteColumn })) return false; // current cell not in table
 
-    const row = absoluteRow - table.startRow; // 1 = première ligne de données
-    const column = absoluteColumn - table.startCol + 1;
+        const row = absoluteRow - table.startRow; // 1 = première ligne de données
+        const column = absoluteColumn - table.startCol + 1;
 
-    if (row < 1) return false; // en-tête
+        if (row < 1) return false; // en-tête
 
-    const data: ChargeData = { ...loadTable(sheet, table), absoluteRow, row, column };
+        const data: ChargeData = { ...loadTable(sheet, table, timings), absoluteRow, row, column };
 
-    console.info(`Charges TBA → Running change on cell (row: ${row}, column: ${column})`);
+        console.info(`Charges TBA → Running change on cell (row: ${row}, column: ${column})`);
 
-    createCreditRows(row, data);
-    refreshAllRows(data);
-
-    writeTable(sheet, data);
+        measureStage(timings, 'createCreditRows', () => createCreditRows(row, data));
+        measureStage(timings, 'refreshAllRows', () => refreshAllRows(data));
+        measureStage(timings, 'writeTable', () => writeTable(sheet, data, timings));
+    } finally {
+        if (timings) {
+            const durationMs = Date.now() - startedAt;
+            const stages = timings.map(({ stage, durationMs }) => `${stage}=${durationMs}ms`).join(', ');
+            console.info(`Charges TBA timing: total=${durationMs}ms${stages ? `, ${stages}` : ''}`);
+        }
+    }
 }
 
 const isDebtRow = (data: TableData, row: number): boolean => !!getValue(data, row, COLUMNS.montant);

@@ -32,6 +32,8 @@ Google Apps Script (TypeScript) automation for managing co-ownership charges and
 
 The sheet table is loaded in memory, edited, then written back in one pass to minimize Apps Script calls.
 
+For temporary performance diagnostics, set `PERFORMANCE_TIMING_ENABLED` to `true` in `src/Code.ts`, run `pnpm push`, then inspect the Apps Script execution logs after editing a cell. Set it back to `false` and push again after measuring. Timings cover server-side execution, not the Sheets client repaint.
+
 ## License
 
 ISC

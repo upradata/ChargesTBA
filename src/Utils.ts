@@ -57,6 +57,19 @@ type TableData = {
     snapshot: { values: string; backgrounds: string }; // état initial, pour ne réécrire que ce qui a changé
 };
 
+type TimingEntry = { stage: string; durationMs: number };
+
+function measureStage<T>(timings: TimingEntry[] | null, stage: string, callback: () => T): T {
+    if (!timings) return callback();
+
+    const startedAt = Date.now();
+    try {
+        return callback();
+    } finally {
+        timings.push({ stage, durationMs: Date.now() - startedAt });
+    }
+}
+
 const mergeFormulas = ({ values, formulas }: Pick<TableData, 'values' | 'formulas'>): unknown[][] =>
     values.map((row, r) => row.map((value, c) => formulas[r][c] || value));
 
@@ -64,12 +77,21 @@ const mergeFormulas = ({ values, formulas }: Pick<TableData, 'values' | 'formula
 function loadTable(
     sheet: GoogleAppsScript.Spreadsheet.Sheet,
     { startRow, startCol, lastRow, lastCol }: Table,
+    timings: TimingEntry[] | null,
 ): TableData {
     // +1 ligne pour exclure l'en-tête
-    const dataRange = sheet.getRange(startRow + 1, startCol, lastRow - startRow, lastCol - startCol + 1);
-    const values = dataRange.getValues();
-    const formulas = dataRange.getFormulas();
-    const backgrounds = dataRange.getBackgrounds().map(row => row.map(color => (color === '#ffffff' ? null : color)));
+    const dataRange = measureStage(timings, 'getDataRange', () =>
+        sheet.getRange(startRow + 1, startCol, lastRow - startRow, lastCol - startCol + 1),
+    );
+    const values = measureStage(timings, 'readValues', () => dataRange.getValues());
+    const formulas = measureStage(timings, 'readFormulas', () => dataRange.getFormulas());
+    const backgrounds = measureStage(timings, 'readBackgrounds', () =>
+        dataRange.getBackgrounds().map(row => row.map(color => (color === '#ffffff' ? null : color))),
+    );
+    const snapshot = measureStage(timings, 'buildSnapshot', () => ({
+        values: JSON.stringify(mergeFormulas({ values, formulas })),
+        backgrounds: JSON.stringify(backgrounds),
+    }));
 
     return {
         values,
@@ -80,27 +102,30 @@ function loadTable(
         nbColumns: lastCol - startCol + 1,
         inserted: null,
         validationClearRows: [],
-        snapshot: {
-            values: JSON.stringify(mergeFormulas({ values, formulas })),
-            backgrounds: JSON.stringify(backgrounds),
-        },
+        snapshot,
     };
 }
 
 /** Writes back only what changed: values and backgrounds each in one call, plus one insert if rows were added. */
-function writeTable(sheet: GoogleAppsScript.Spreadsheet.Sheet, data: TableData): void {
+function writeTable(sheet: GoogleAppsScript.Spreadsheet.Sheet, data: TableData, timings: TimingEntry[] | null): void {
     const { values, backgrounds, startRow, startCol, nbColumns, inserted, snapshot } = data;
 
-    if (inserted) sheet.insertRowsAfter(startRow + inserted.afterRow - 1, inserted.count);
+    if (inserted) {
+        measureStage(timings, 'insertRows', () =>
+            sheet.insertRowsAfter(startRow + inserted.afterRow - 1, inserted.count),
+        );
+    }
 
     const merged = mergeFormulas(data);
     const valuesChanged = !!inserted || JSON.stringify(merged) !== snapshot.values;
     const backgroundsChanged = !!inserted || JSON.stringify(backgrounds) !== snapshot.backgrounds;
 
     if (valuesChanged || backgroundsChanged) {
-        const range = sheet.getRange(startRow, startCol, values.length, nbColumns);
-        if (valuesChanged) range.setValues(merged);
-        if (backgroundsChanged) range.setBackgrounds(backgrounds);
+        const range = measureStage(timings, 'getWriteRange', () =>
+            sheet.getRange(startRow, startCol, values.length, nbColumns),
+        );
+        if (valuesChanged) measureStage(timings, 'writeValues', () => range.setValues(merged));
+        if (backgroundsChanged) measureStage(timings, 'writeBackgrounds', () => range.setBackgrounds(backgrounds));
     }
 
     if (data.validationClearRows.length > 0) {
@@ -108,7 +133,10 @@ function writeTable(sheet: GoogleAppsScript.Spreadsheet.Sheet, data: TableData):
         const a1Notations = data.validationClearRows.map(row => `${column}${startRow + row - 1}`);
 
         tryCatch(
-            () => sheet.getRangeList(a1Notations).clearDataValidations(),
+            () =>
+                measureStage(timings, 'clearValidations', () =>
+                    sheet.getRangeList(a1Notations).clearDataValidations(),
+                ),
             'La cellule est verrouillée par le type de colonne.',
         );
     }

@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars -- Apps Script invokes debug and trigger functions by global name. */
 function testDebug(): void {
     DEBUG_MODE = true;
+    PERFORMANCE_TIMING_ENABLED = true;
 
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Charges'); // Remplacez par le nom exact de votre onglet
     if (!sheet) {

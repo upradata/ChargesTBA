@@ -12,9 +12,28 @@ for (const file of ['Utils.js', 'Code.js']) {
 const columns = runInContext('COLUMNS', context);
 const createCreditRows = runInContext('createCreditRows', context);
 const refreshAllRows = runInContext('refreshAllRows', context);
+const measureStage = runInContext('measureStage', context);
 
 const NB_COLUMNS = 9;
 const emptyRow = () => Array(NB_COLUMNS).fill('');
+
+test('stage timing is opt-in and preserves callback results', () => {
+    let called = false;
+    assert.equal(
+        measureStage(null, 'disabled', () => {
+            called = true;
+            return 42;
+        }),
+        42,
+    );
+    assert.equal(called, true);
+
+    const timings = [];
+    assert.equal(measureStage(timings, 'enabled', () => 42), 42);
+    assert.equal(timings.length, 1);
+    assert.equal(timings[0].stage, 'enabled');
+    assert.equal(typeof timings[0].durationMs, 'number');
+});
 
 // rows: arrays of [montant, nbPaiements, somme, paye] per row, starting at sheet row 2
 function createData(rows, { column = columns.nbPaiments } = {}) {
