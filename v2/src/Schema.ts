@@ -107,7 +107,14 @@ const V2_TABLES: V2TableDef[] = [
     {
         key: 'paiements',
         columns: [
-            { id: 'date', header: 'Date', kind: 'input', width: 100, format: V2_FORMATS.date, note: 'Date du paiement.' },
+            {
+                id: 'date',
+                header: 'Date',
+                kind: 'input',
+                width: 100,
+                format: V2_FORMATS.date,
+                note: 'Date du paiement.',
+            },
             {
                 id: 'type',
                 header: 'Type',
@@ -138,8 +145,8 @@ const V2_TABLES: V2TableDef[] = [
                 width: 290,
                 note: 'Identifiant lisible utilisé par les affectations (date · type · montant). Calculé.',
                 formula: () =>
-                    `=MAP(${v2PaymentCol('date')},${v2PaymentCol('type')},${v2PaymentCol('montant')},${v2PaymentCol('ref')},` +
-                    `LAMBDA(dt,typ,amt,ref,IF(dt="","",TEXT(dt,"yyyy-mm-dd")&" · "&typ&" · "&TEXT(amt,"0.00")&IF(ref="",""," · "&ref))))`,
+                    `=MAP(${v2PaymentCol('date')},${v2PaymentCol('type')},${v2PaymentCol('montant')},${v2PaymentCol('ref')},`
+                    + `LAMBDA(dt,typ,amt,ref,IF(dt="","",TEXT(dt,"yyyy-mm-dd")&" · "&typ&" · "&TEXT(amt,"0.00")&IF(ref="",""," · "&ref))))`,
             },
             {
                 id: 'affecte',
@@ -168,9 +175,9 @@ const V2_TABLES: V2TableDef[] = [
                 width: 190,
                 note: 'Calculé.',
                 formula: () =>
-                    `=MAP(${v2PaymentCol('cle')},${v2PaymentCol('montant')},${v2PaymentCol('nonAlloue')},LAMBDA(key,amt,rest,` +
-                    `IF(key="","",IF(amt="","${V2_STATUS.paymentMissingAmount}",IF(COUNTIF(${v2PaymentCol('cle')},key)>1,"${V2_STATUS.paymentDuplicate}",` +
-                    `IF(rest=0,"${V2_STATUS.paymentDone}",IF(rest*amt>0,"${V2_STATUS.paymentToAllocate}","${V2_STATUS.paymentOver}"))))))) `.trimEnd(),
+                    `=MAP(${v2PaymentCol('cle')},${v2PaymentCol('montant')},${v2PaymentCol('nonAlloue')},LAMBDA(key,amt,rest,`
+                    + `IF(key="","",IF(amt="","${V2_STATUS.paymentMissingAmount}",IF(COUNTIF(${v2PaymentCol('cle')},key)>1,"${V2_STATUS.paymentDuplicate}",`
+                    + `IF(rest=0,"${V2_STATUS.paymentDone}",IF(rest*amt>0,"${V2_STATUS.paymentToAllocate}","${V2_STATUS.paymentOver}"))))))) `.trimEnd(),
             },
         ],
     },
@@ -185,7 +192,13 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.date,
                 note: "Date d'exigibilité. Sans échéancier, la charge est due en totalité à cette date.",
             },
-            { id: 'categorie', header: 'Catégorie', kind: 'input', width: 140, note: 'Appel de fonds, travaux, régularisation…' },
+            {
+                id: 'categorie',
+                header: 'Catégorie',
+                kind: 'input',
+                width: 140,
+                note: 'Appel de fonds, travaux, régularisation…',
+            },
             {
                 id: 'libelle',
                 header: 'Libellé',
@@ -248,8 +261,8 @@ const V2_TABLES: V2TableDef[] = [
                 width: 150,
                 note: 'Part payée du montant dû. Calculé.',
                 formula: () =>
-                    `=MAP(${v2ChargeCol('montant')},${v2ChargeCol('paye')},LAMBDA(amt,paid,IF(N(amt)<=0,"",` +
-                    `LET(p,N(paid)/amt,n,MAX(0,MIN(10,ROUND(p*10,0))),REPT("█",n)&REPT("░",10-n)&" "&TEXT(p,"0%")))))`,
+                    `=MAP(${v2ChargeCol('montant')},${v2ChargeCol('paye')},LAMBDA(amt,paid,IF(N(amt)<=0,"",`
+                    + `LET(p,N(paid)/amt,n,MAX(0,MIN(10,ROUND(p*10,0))),REPT("█",n)&REPT("░",10-n)&" "&TEXT(p,"0%")))))`,
             },
             {
                 id: 'objectif',
@@ -259,9 +272,9 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: "Cumul des échéances prévues jusqu'à aujourd'hui (sans échéancier : le montant dû à la date de la charge). Calculé.",
                 formula: () =>
-                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('date')},${v2ChargeCol('montant')},LAMBDA(key,dt,amt,IF(key="","",` +
-                    `IF(COUNTIF(${v2Ref('echeances', 'charge')},key)=0,IF(dt<=TODAY(),N(amt),0),` +
-                    `MIN(N(amt),SUMIFS(${v2Ref('echeances', 'montant')},${v2Ref('echeances', 'charge')},key,${v2Ref('echeances', 'date')},"<="&TODAY()))))))`,
+                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('date')},${v2ChargeCol('montant')},LAMBDA(key,dt,amt,IF(key="","",`
+                    + `IF(COUNTIF(${v2Ref('echeances', 'charge')},key)=0,IF(dt<=TODAY(),N(amt),0),`
+                    + `MIN(N(amt),SUMIFS(${v2Ref('echeances', 'montant')},${v2Ref('echeances', 'charge')},key,${v2Ref('echeances', 'date')},"<="&TODAY()))))))`,
             },
             {
                 id: 'retard',
@@ -291,8 +304,8 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Objectif recalculé : reste à payer ÷ nombre d’échéances à venir. Calculé.',
                 formula: () =>
-                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('reste')},LAMBDA(key,rest,IF(key="","",` +
-                    `LET(n,COUNTIFS(${v2Ref('echeances', 'charge')},key,${v2Ref('echeances', 'date')},">"&TODAY()),IF(OR(n=0,rest<=0),"",ROUND(rest/n,2))))))`,
+                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('reste')},LAMBDA(key,rest,IF(key="","",`
+                    + `LET(n,COUNTIFS(${v2Ref('echeances', 'charge')},key,${v2Ref('echeances', 'date')},">"&TODAY()),IF(OR(n=0,rest<=0),"",ROUND(rest/n,2))))))`,
             },
             {
                 id: 'statut',
@@ -301,9 +314,9 @@ const V2_TABLES: V2TableDef[] = [
                 width: 150,
                 note: 'Calculé.',
                 formula: () =>
-                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('montant')},${v2ChargeCol('paye')},${v2ChargeCol('reste')},${v2ChargeCol('retard')},` +
-                    `LAMBDA(key,amt,paid,rest,late,IF(key="","",IF(N(amt)<=0,"${V2_STATUS.chargeInvalid}",IF(rest=0,"${V2_STATUS.chargeDone}",` +
-                    `IF(rest<0,"${V2_STATUS.chargeOverpaid}",IF(late>0,"${V2_STATUS.chargeLate}",IF(N(paid)>0,"${V2_STATUS.chargePartial}","${V2_STATUS.chargeToPay}"))))))))`,
+                    `=MAP(${v2ChargeCol('cle')},${v2ChargeCol('montant')},${v2ChargeCol('paye')},${v2ChargeCol('reste')},${v2ChargeCol('retard')},`
+                    + `LAMBDA(key,amt,paid,rest,late,IF(key="","",IF(N(amt)<=0,"${V2_STATUS.chargeInvalid}",IF(rest=0,"${V2_STATUS.chargeDone}",`
+                    + `IF(rest<0,"${V2_STATUS.chargeOverpaid}",IF(late>0,"${V2_STATUS.chargeLate}",IF(N(paid)>0,"${V2_STATUS.chargePartial}","${V2_STATUS.chargeToPay}"))))))))`,
             },
         ],
     },
@@ -360,8 +373,8 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Plus petit montant entre le non alloué du paiement et le reste dû de la charge (avant cette ligne). Calculé, non appliqué.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},` +
-                    `LAMBDA(pay,ch,amt,np,rc,IF(OR(pay="",ch="",np="?",rc="?"),"",LET(ap,np+N(amt),ac,rc+N(amt),IF(ap>=0,ROUND(MAX(0,MIN(ap,ac)),2),ROUND(ap,2))))))`,
+                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    + `LAMBDA(pay,ch,amt,np,rc,IF(OR(pay="",ch="",np="?",rc="?"),"",LET(ap,np+N(amt),ac,rc+N(amt),IF(ap>=0,ROUND(MAX(0,MIN(ap,ac)),2),ROUND(ap,2))))))`,
             },
             {
                 id: 'controle',
@@ -370,12 +383,12 @@ const V2_TABLES: V2TableDef[] = [
                 width: 260,
                 note: 'Cohérence de la ligne. Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},` +
-                    `LAMBDA(pay,ch,amt,np,rc,IF(AND(pay="",ch="",amt=""),"",IF(pay="","✖ Choisir un paiement",IF(ch="","✖ Choisir une charge",` +
-                    `IF(OR(np="?",rc="?"),"✖ Paiement ou charge introuvable (clé modifiée ?)",IF(amt="","⚠ Saisir un montant",` +
-                    `IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)>1,"⚠ Paiement en doublon",` +
-                    `IF(OR(AND(SUMIFS(${v2Ref('paiements', 'montant')},${v2Ref('paiements', 'cle')},pay)>=0,np<0),AND(SUMIFS(${v2Ref('paiements', 'montant')},${v2Ref('paiements', 'cle')},pay)<0,np>0)),` +
-                    `"✖ Dépasse le montant du paiement",IF(rc<0,"⚠ Dépasse le dû de la charge","✔"))))))))))`,
+                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    + `LAMBDA(pay,ch,amt,np,rc,IF(AND(pay="",ch="",amt=""),"",IF(pay="","✖ Choisir un paiement",IF(ch="","✖ Choisir une charge",`
+                    + `IF(OR(np="?",rc="?"),"✖ Paiement ou charge introuvable (clé modifiée ?)",IF(amt="","⚠ Saisir un montant",`
+                    + `IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)>1,"⚠ Paiement en doublon",`
+                    + `IF(OR(AND(SUMIFS(${v2Ref('paiements', 'montant')},${v2Ref('paiements', 'cle')},pay)>=0,np<0),AND(SUMIFS(${v2Ref('paiements', 'montant')},${v2Ref('paiements', 'cle')},pay)<0,np>0)),`
+                    + `"✖ Dépasse le montant du paiement",IF(rc<0,"⚠ Dépasse le dû de la charge","✔"))))))))))`,
             },
             {
                 id: 'datePaiement',
@@ -408,7 +421,14 @@ const V2_TABLES: V2TableDef[] = [
                 width: 300,
                 note: 'Charge concernée. Lignes saisies à la main ou générées par le menu Charges TBA.',
             },
-            { id: 'date', header: 'Date prévue', kind: 'input', width: 110, format: V2_FORMATS.date, note: 'Date objectif du versement.' },
+            {
+                id: 'date',
+                header: 'Date prévue',
+                kind: 'input',
+                width: 110,
+                format: V2_FORMATS.date,
+                note: 'Date objectif du versement.',
+            },
             {
                 id: 'montant',
                 header: 'Montant prévu',
@@ -453,9 +473,9 @@ const V2_TABLES: V2TableDef[] = [
                 width: 130,
                 note: 'Calculé.',
                 formula: () =>
-                    `=MAP(${v2ScheduleCol('charge')},${v2ScheduleCol('date')},${v2ScheduleCol('montant')},${v2ScheduleCol('cumul')},${v2ScheduleCol('paye')},` +
-                    `LAMBDA(ch,dt,amt,cum,paid,IF(OR(ch="",dt=""),"",IF(paid>=cum-0.005,"${V2_STATUS.scheduleDone}",` +
-                    `IF(dt<=TODAY(),IF(paid>cum-N(amt),"${V2_STATUS.schedulePartial}","${V2_STATUS.scheduleLate}"),"${V2_STATUS.scheduleUpcoming}")))))`,
+                    `=MAP(${v2ScheduleCol('charge')},${v2ScheduleCol('date')},${v2ScheduleCol('montant')},${v2ScheduleCol('cumul')},${v2ScheduleCol('paye')},`
+                    + `LAMBDA(ch,dt,amt,cum,paid,IF(OR(ch="",dt=""),"",IF(paid>=cum-0.005,"${V2_STATUS.scheduleDone}",`
+                    + `IF(dt<=TODAY(),IF(paid>cum-N(amt),"${V2_STATUS.schedulePartial}","${V2_STATUS.scheduleLate}"),"${V2_STATUS.scheduleUpcoming}")))))`,
             },
             {
                 id: 'controle',
@@ -464,9 +484,9 @@ const V2_TABLES: V2TableDef[] = [
                 width: 260,
                 note: 'Le total des échéances d’une charge doit égaler son montant dû. Calculé.',
                 formula: () =>
-                    `=MAP(${v2ScheduleCol('charge')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"✖ Charge introuvable (clé modifiée ?)",` +
-                    `LET(tot,SUMIFS(${v2ScheduleCol('montant')},${v2ScheduleCol('charge')},ch),due,SUMIFS(${v2Ref('charges', 'montant')},${v2Ref('charges', 'cle')},ch),` +
-                    `IF(ABS(tot-due)>0.005,"⚠ Total échéances ≠ dû ("&TEXT(tot-due,"+0.00;-0.00")&")","✔"))))))`,
+                    `=MAP(${v2ScheduleCol('charge')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"✖ Charge introuvable (clé modifiée ?)",`
+                    + `LET(tot,SUMIFS(${v2ScheduleCol('montant')},${v2ScheduleCol('charge')},ch),due,SUMIFS(${v2Ref('charges', 'montant')},${v2Ref('charges', 'cle')},ch),`
+                    + `IF(ABS(tot-due)>0.005,"⚠ Total échéances ≠ dû ("&TEXT(tot-due,"+0.00;-0.00")&")","✔"))))))`,
             },
         ],
     },

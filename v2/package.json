@@ -1,10 +1,10 @@
 {
     "name": "@upradata/charges-copropriete-v2",
     "version": "0.1.0",
+    "private": true,
     "description": "Formula-driven co-ownership charges and payments tracker for Google Sheets",
     "license": "ISC",
     "author": "El Pupi",
-    "private": true,
     "type": "module",
     "scripts": {
         "build": "tsc --project tsconfig.json && node scripts/copy-manifest.mjs",

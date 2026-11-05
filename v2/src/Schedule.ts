@@ -37,7 +37,8 @@ function v2SplitAmount(total: number, count: number): number[] {
 
 /** Uniform schedule: `count` installments, one every `everyMonths` months starting at `startIso`. */
 function v2GenerateSchedule(total: number, count: number, startIso: string, everyMonths: number): V2Installment[] {
-    if (!Number.isInteger(everyMonths) || everyMonths < 1) throw new Error('La périodicité doit être un entier ≥ 1 mois');
+    if (!Number.isInteger(everyMonths) || everyMonths < 1)
+        throw new Error('La périodicité doit être un entier ≥ 1 mois');
     return v2SplitAmount(total, count).map((amount, i) => ({ date: v2AddMonths(startIso, i * everyMonths), amount }));
 }
 
