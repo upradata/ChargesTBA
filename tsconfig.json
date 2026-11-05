@@ -1,17 +1,15 @@
 {
     "compilerOptions": {
-        "target": "esnext",
-        "module": "NodeNext",
-        "moduleResolution": "NodeNext",
+        "target": "ES2019",
+        "module": "ESNext",
+        "moduleDetection": "legacy",
         "outDir": "dist",
         "rootDir": "src",
+        "types": ["google-apps-script"],
         "strict": true,
-        "esModuleInterop": true,
-        "allowSyntheticDefaultImports": true,
+        "noEmitOnError": true,
         "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "declaration": true,
-        "sourceMap": true
+        "forceConsistentCasingInFileNames": true
     },
     "include": ["src/**/*.ts"]
 }

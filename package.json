@@ -6,22 +6,24 @@
     "license": "ISC",
     "author": "",
     "type": "module",
-    "main": "dist/index.js",
     "scripts": {
-        "deploy": "clasp deploy",
+        "build": "tsc --project tsconfig.json && node scripts/copy-manifest.mjs",
+        "deploy": "pnpm build && clasp push && clasp deploy",
         "format": "oxfmt",
         "lint": "oxlint",
         "login": "clasp login",
         "pull": "clasp pull",
-        "push": "clasp push",
-        "push:watch": "clasp push --watch",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "push": "pnpm build && clasp push",
+        "push:watch": "node scripts/push-watch.mjs",
+        "test": "pnpm build && node --test",
+        "typecheck": "tsc --noEmit"
     },
     "devDependencies": {
         "@google/clasp": "^3.4.1",
         "@types/google-apps-script": "^2.0.14",
         "oxfmt": "^0.76.0",
         "oxlint": "^1.91.0",
+        "oxlint-tsgolint": "^7.0.2005",
         "typescript": "^7.0.2"
     },
     "devEngines": {
