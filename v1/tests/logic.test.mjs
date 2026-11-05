@@ -29,7 +29,10 @@ test('stage timing is opt-in and preserves callback results', () => {
     assert.equal(called, true);
 
     const timings = [];
-    assert.equal(measureStage(timings, 'enabled', () => 42), 42);
+    assert.equal(
+        measureStage(timings, 'enabled', () => 42),
+        42,
+    );
     assert.equal(timings.length, 1);
     assert.equal(timings[0].stage, 'enabled');
     assert.equal(typeof timings[0].durationMs, 'number');

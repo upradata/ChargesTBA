@@ -134,9 +134,7 @@ function writeTable(sheet: GoogleAppsScript.Spreadsheet.Sheet, data: TableData, 
 
         tryCatch(
             () =>
-                measureStage(timings, 'clearValidations', () =>
-                    sheet.getRangeList(a1Notations).clearDataValidations(),
-                ),
+                measureStage(timings, 'clearValidations', () => sheet.getRangeList(a1Notations).clearDataValidations()),
             'La cellule est verrouillée par le type de colonne.',
         );
     }
