@@ -1,0 +1,23 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "ignorePatterns": ["**/dist/**", "**/coverage/**", "**/node_modules/**"],
+    "options": {
+        "typeAware": true,
+        "typeCheck": true,
+        "reportUnusedDisableDirectives": "warn",
+        "respectEslintDisableDirectives": true
+    },
+    "rules": {
+        "no-debugger": "error",
+        "no-duplicate-imports": "error",
+        "no-unreachable": "error",
+        "no-constant-condition": "error",
+        "unicorn/prefer-node-protocol": "error",
+        "no-console": [
+            "warn",
+            {
+                "allow": ["warn", "error"]
+            }
+        ]
+    }
+}

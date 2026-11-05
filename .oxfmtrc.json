@@ -1,0 +1,54 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "printWidth": 120,
+    "tabWidth": 4,
+    "trailingComma": "all",
+    "singleQuote": true,
+    "semi": true,
+    "arrowParens": "avoid",
+    "bracketSameLine": true,
+    "bracketSpacing": true,
+    "embeddedLanguageFormatting": "auto",
+    "experimentalOperatorPosition": "start",
+    "insertFinalNewline": true,
+    "jsdoc": true,
+    "objectWrap": "preserve",
+    "proseWrap": "preserve",
+    "quoteProps": "consistent",
+    "singleAttributePerLine": false,
+    "useTabs": false,
+    "sortTailwindcss": {
+        "functions": ["clsx", "cn", "cva"],
+        "attributes": [],
+        "preserveDuplicates": false,
+        "preserveWhitespace": false
+    },
+    "sortPackageJson": {
+        "sortScripts": true
+    },
+    "sortImports": {
+        "order": "asc",
+        "ignoreCase": true,
+        "newlinesBetween": true,
+        "sortSideEffects": false,
+        "internalPattern": ["@/"],
+        "customGroups": [
+            {
+                "groupName": "upradata",
+                "elementNamePattern": ["@upradata/**"]
+            }
+        ],
+        "groups": [
+            "builtin",
+            "external",
+            "upradata",
+            "internal",
+            "subpath",
+            "parent",
+            "sibling",
+            "index",
+            "style",
+            "unknown"
+        ]
+    }
+}
