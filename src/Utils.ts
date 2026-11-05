@@ -30,160 +30,121 @@ function tryCatch(
     }
 }
 
-function getTableByName(
-    sheet: GoogleAppsScript.Spreadsheet.Sheet,
-    tableName: string,
-): {
-    range: GoogleAppsScript.Spreadsheet.Range;
-    dataRange: GoogleAppsScript.Spreadsheet.Range;
-    header: GoogleAppsScript.Spreadsheet.Range;
-} {
-    const spreadsheet = sheet.getParent();
-    const tableRange = spreadsheet.getRangeByName(tableName);
+type Table = {
+    startRow: number; // ligne d'en-tête
+    startCol: number;
+    lastRow: number;
+    lastCol: number;
+};
+
+function getTableByName(sheet: GoogleAppsScript.Spreadsheet.Sheet, tableName: string): Table {
+    const tableRange = sheet.getParent().getRangeByName(tableName);
 
     if (!tableRange) throw new Error(`Table with name "${tableName}" does not exist`);
 
-    const numRows = tableRange.getNumRows();
-    const numCols = tableRange.getNumColumns();
+    return parseRangeA1(tableRange.getA1Notation());
+}
+
+type TableData = {
+    values: unknown[][];
+    formulas: string[][]; // '' when the cell has no formula
+    backgrounds: (string | null)[][];
+    startRow: number; // absolute sheet row of the first data row
+    startCol: number;
+    nbColumns: number;
+    inserted: { afterRow: number; count: number } | null; // relative row after which rows were spliced in
+    validationClearRows: number[]; // relative rows whose Payé validation must be cleared after the write
+    snapshot: { values: string; backgrounds: string }; // état initial, pour ne réécrire que ce qui a changé
+};
+
+const mergeFormulas = ({ values, formulas }: Pick<TableData, 'values' | 'formulas'>): unknown[][] =>
+    values.map((row, r) => row.map((value, c) => formulas[r][c] || value));
+
+/** Reads values, formulas and backgrounds of the data range in 3 API calls. */
+function loadTable(
+    sheet: GoogleAppsScript.Spreadsheet.Sheet,
+    { startRow, startCol, lastRow, lastCol }: Table,
+): TableData {
+    // +1 ligne pour exclure l'en-tête
+    const dataRange = sheet.getRange(startRow + 1, startCol, lastRow - startRow, lastCol - startCol + 1);
+    const values = dataRange.getValues();
+    const formulas = dataRange.getFormulas();
+    const backgrounds = dataRange.getBackgrounds().map(row => row.map(color => (color === '#ffffff' ? null : color)));
 
     return {
-        range: tableRange,
-        // On décale de 1 ligne vers le bas ET on réduit la hauteur de 1 pour exclure l'en-tête
-        dataRange: tableRange.offset(1, 0, numRows - 1, numCols),
-        header: tableRange.offset(0, 0, 1, numCols),
+        values,
+        formulas,
+        backgrounds,
+        startRow: startRow + 1,
+        startCol,
+        nbColumns: lastCol - startCol + 1,
+        inserted: null,
+        validationClearRows: [],
+        snapshot: {
+            values: JSON.stringify(mergeFormulas({ values, formulas })),
+            backgrounds: JSON.stringify(backgrounds),
+        },
     };
 }
 
-function getColumn(tableRange: GoogleAppsScript.Spreadsheet.Range, columnIndex: number): number {
-    const startCol = tableRange.getColumn();
-    return startCol + columnIndex;
+/** Writes back only what changed: values and backgrounds each in one call, plus one insert if rows were added. */
+function writeTable(sheet: GoogleAppsScript.Spreadsheet.Sheet, data: TableData): void {
+    const { values, backgrounds, startRow, startCol, nbColumns, inserted, snapshot } = data;
+
+    if (inserted) sheet.insertRowsAfter(startRow + inserted.afterRow - 1, inserted.count);
+
+    const merged = mergeFormulas(data);
+    const valuesChanged = !!inserted || JSON.stringify(merged) !== snapshot.values;
+    const backgroundsChanged = !!inserted || JSON.stringify(backgrounds) !== snapshot.backgrounds;
+
+    if (valuesChanged || backgroundsChanged) {
+        const range = sheet.getRange(startRow, startCol, values.length, nbColumns);
+        if (valuesChanged) range.setValues(merged);
+        if (backgroundsChanged) range.setBackgrounds(backgrounds);
+    }
+
+    if (data.validationClearRows.length > 0) {
+        const column = columnToLetter(startCol + COLUMNS.paye - 1);
+        const a1Notations = data.validationClearRows.map(row => `${column}${startRow + row - 1}`);
+
+        tryCatch(
+            () => sheet.getRangeList(a1Notations).clearDataValidations(),
+            'La cellule est verrouillée par le type de colonne.',
+        );
+    }
 }
 
-function getRow(tableRange: GoogleAppsScript.Spreadsheet.Range, rowIndex: number): number {
-    const startRow = tableRange.getRow();
-    return startRow + rowIndex;
+function columnToLetter(column: number): string {
+    let letters = '';
+    for (let n = column; n > 0; n = Math.floor((n - 1) / 26)) {
+        letters = String.fromCharCode(65 + ((n - 1) % 26)) + letters;
+    }
+    return letters;
 }
 
-function getTableCoordinates(tableRange: GoogleAppsScript.Spreadsheet.Range): {
+function parseRangeA1(a1Notation: string): {
     startRow: number;
     startCol: number;
     lastRow: number;
     lastCol: number;
 } {
-    return {
-        startRow: tableRange.getRow(), // Première ligne
-        startCol: tableRange.getColumn(), // Première colonne
-        lastRow: tableRange.getLastRow(), // Dernière ligne
-        lastCol: tableRange.getLastColumn(), // Dernière colonne
+    const [first, last = first] = a1Notation.split(':');
+
+    const parse = (a1: string): { row: number; col: number } => {
+        const [, letters, row] = /^\$?([A-Z]+)\$?(\d+)$/.exec(a1) ?? [];
+        if (!letters) throw new Error(`Invalid A1 notation: "${a1}"`);
+        return { row: Number(row), col: letters.split('').reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0) };
     };
+
+    const start = parse(first);
+    const end = parse(last);
+
+    return { startRow: start.row, startCol: start.col, lastRow: end.row, lastCol: end.col };
 }
 
 function isInTable(
-    tableRange: GoogleAppsScript.Spreadsheet.Range,
+    { startRow, startCol, lastRow, lastCol }: Table,
     { row, column }: { row: number; column: number },
 ): boolean {
-    const { startRow, startCol, lastRow, lastCol } = getTableCoordinates(tableRange);
-
-    if (row >= startRow && row <= lastRow && column >= startCol && column <= lastCol) return true;
-
-    return false;
+    return row >= startRow && row <= lastRow && column >= startCol && column <= lastCol;
 }
-
-function getTableEntireRow(
-    tableRange: GoogleAppsScript.Spreadsheet.Range,
-    row: number,
-): GoogleAppsScript.Spreadsheet.Range {
-    return tableRange.offset(row - 1, 0, 1, tableRange.getNumColumns());
-}
-
-function getTableEntireColumn(
-    tableRange: GoogleAppsScript.Spreadsheet.Range,
-    column: number,
-): GoogleAppsScript.Spreadsheet.Range {
-    return tableRange.offset(0, column - 1, tableRange.getNumRows(), 1);
-}
-
-function getTableCell(
-    tableRange: GoogleAppsScript.Spreadsheet.Range,
-    { row, column }: { row: number; column: number },
-): GoogleAppsScript.Spreadsheet.Range {
-    return tableRange.offset(row - 1, column - 1, 1, 1);
-}
-
-function getA1Coords(cell: GoogleAppsScript.Spreadsheet.Range): { row: number; column: string } {
-    const a1 = cell.getA1Notation();
-    const column = a1.match(/[A-Za-z]+/)?.[0];
-    if (!column) {
-        throw new Error(`Invalid A1 notation: "${a1}"`);
-    }
-    return { row: cell.getRow(), column };
-}
-
-function getA1NotationWithDollars({
-    row,
-    column,
-    $row,
-    $column,
-}: {
-    row?: number;
-    column?: string;
-    $row?: number;
-    $column?: string;
-}): string {
-    const c = column ?? $column;
-    const r = row ?? $row;
-
-    const isCol$ = $column !== undefined;
-    const isRow$ = $row != undefined;
-
-    return `${isCol$ ? '$' : ''}${c}${isRow$ ? '$' : ''}${r}`;
-}
-
-function get$A1({ row, column }: { row: number; column: string }): string {
-    return getA1NotationWithDollars({ row, $column: column });
-}
-
-function getA$1({ row, column }: { row: number; column: string }): string {
-    return getA1NotationWithDollars({ $row: row, column });
-}
-
-function get$A$1({ row, column }: { row: number; column: string }): string {
-    return getA1NotationWithDollars({ $row: row, $column: column });
-}
-
-/* function getContiguousRange({ sheet, startCell, direction }) {
-  
-  const startRow = startCell.getRow();
-  const startCol = startCell.getColumn();
-  
-  // Vérifie si la cellule de départ est déjà vide
-  if (startCell.isBlank()) {
-    return null;
-  }
-  
-  // Trouve la dernière cellule remplie dans la colonne en descendant
-  const lastFilledCell = startCell.getNextDataCell(direction);
-  
-  const getRangeData = () => {
-    if(direction === SpreadsheetApp.Direction.UP || direction === SpreadsheetApp.Direction.DOWN) {
-      const lastRow = lastFilledCell.getRow();
-      
-      // Si la cellule du bas est en dessous de la ligne de départ, on construit la plage
-      const numRows = Math.abs(lastRow - startRow) + 1;
-      const numCols = startCell.getNumColumns();
-      
-      return { startRow, startCol, numRows, numCols };
-    }
-
-    // ROWS direction
-    const lastCol = lastFilledCell.getColumn();
-    
-    // Si la cellule du bas est en dessous de la ligne de départ, on construit la plage
-    const numCols = Math.abs(lastCol - startCol) + 1;
-    const numRows = startCell.getNumRows();
-
-    return { startRow, startCol, numRows, numCols };
-  }
-
-  return sheet.getRange(...getRangeData());
-}*/

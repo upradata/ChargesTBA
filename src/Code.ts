@@ -39,260 +39,194 @@ function onEdit(e: Pick<GoogleAppsScript.Events.SheetsOnEdit, 'range'> | undefin
 
     try {
         isExecuting = true;
-        refresh(e.range); //, e.value);
+        refresh(e.range);
     } finally {
         isExecuting = false; // Libère le verrou dans tous les cas (même en cas d'erreur)
     }
 }
 
+/** Tableau chargé en mémoire (lignes et colonnes 1-based relatives aux données, en-tête exclu) + cellule éditée. */
+type ChargeData = TableData & {
+    absoluteRow: number;
+    row: number;
+    column: number;
+};
+
+const getValue = ({ values }: TableData, row: number, column: number): unknown => values[row - 1]?.[column - 1];
+
+function setValue(data: TableData, row: number, column: number, value: unknown): void {
+    data.values[row - 1][column - 1] = value;
+    data.formulas[row - 1][column - 1] = '';
+}
+
+function setFormula(data: TableData, row: number, column: number, formula: string): void {
+    data.formulas[row - 1][column - 1] = formula;
+}
+
+const getA1 = (data: TableData, row: number, column: number): string =>
+    `${columnToLetter(data.startCol + column - 1)}${data.startRow + row - 1}`;
+
 function refresh(range: GoogleAppsScript.Spreadsheet.Range): void | false {
     const sheet = range.getSheet();
-    const absoluteRow = range.getRow();
-    const absoluteColumn = range.getColumn();
+    const { startRow: absoluteRow, startCol: absoluteColumn } = parseRangeA1(range.getA1Notation());
 
     const table = getTableByName(sheet, TABLE_NAME);
 
-    if (table.range.getNumRows() === 1) return;
+    if (table.lastRow === table.startRow) return;
 
-    if (!isInTable(table.range, { row: absoluteRow, column: absoluteColumn })) return false; // current cell not in table
+    if (!isInTable(table, { row: absoluteRow, column: absoluteColumn })) return false; // current cell not in table
 
-    const { startRow, startCol } = getTableCoordinates(table.range);
+    const row = absoluteRow - table.startRow; // 1 = première ligne de données
+    const column = absoluteColumn - table.startCol + 1;
 
-    const toRelativeRow = (absRow: number): number => absRow - startRow;
-    const toRelativeColumn = (absCol: number): number => absCol - startCol + 1;
+    if (row < 1) return false; // en-tête
 
-    const row = toRelativeRow(absoluteRow);
-    const column = toRelativeColumn(absoluteColumn - startCol + 1);
-
-    // const toAbsoluteRow = row => row + startRow;
-    // const toAbsoluteCol = col => col + startCol - 1;
-
-    const getCell = (row: number, column: number): GoogleAppsScript.Spreadsheet.Range =>
-        getTableCell(table.dataRange, { row, column });
-
-    // const _getA1 = (row, column) => getTableCell(table.dataRange, { row, column }).getA1Notation();
-    // const _get$A1 = (row, column) => get$A1(getA1Coords(getTableCell(table.dataRange, { row, column })));
-
-    const data: ChargeData = {
-        sheet,
-        toRelativeRow,
-        toRelativeColumn,
-        absoluteRow,
-        absoluteColumn,
-        row,
-        column,
-        table,
-        getCell,
-        getA1: (row: number, column: number): string => getTableCell(table.dataRange, { row, column }).getA1Notation(),
-    };
+    const data: ChargeData = { ...loadTable(sheet, table), absoluteRow, row, column };
 
     console.info(`Charges TBA → Running change on cell (row: ${row}, column: ${column})`);
 
     createCreditRows(row, data);
-    updateCreditRowStatus(row, data);
-    setDebitRowFormat(row, data);
-    // refreshAllRows(data);
+    refreshAllRows(data);
+
+    writeTable(sheet, data);
 }
 
-type ChargeTable = ReturnType<typeof getTableByName>;
+const isDebtRow = (data: TableData, row: number): boolean => !!getValue(data, row, COLUMNS.montant);
 
-type ChargeData = {
-    sheet: GoogleAppsScript.Spreadsheet.Sheet;
-    toRelativeRow: (absoluteRow: number) => number;
-    toRelativeColumn: (absoluteColumn: number) => number;
-    absoluteRow: number;
-    absoluteColumn: number;
-    row: number;
-    column: number;
-    table: ChargeTable;
-    getCell: (row: number, column: number) => GoogleAppsScript.Spreadsheet.Range;
-    getA1: (row: number, column: number) => string;
-};
+const getRowCount = ({ values }: TableData): number => values.length;
 
-const isDebtRow = ({ row, getCell }: ChargeData): boolean => !!getCell(row, COLUMNS.montant).getValue();
-
-/**
- * Parcourt tout le tableau pour appliquer le fond gris aux lignes principales ayant un montant, ou réinitialiser le
- * fond si le montant est vide.
- */
-function refreshAllRows(data: ChargeData): void {
-    const { table } = data;
-
-    // if(table.range.getNumRows() === 1) return;
-
-    // const montantValues = getTableEntireColumn(table.dataRange, COLUMNS.montant).getValues();
-    // montantValues[i][0]
-
-    for (let row = 1; row <= table.dataRange.getNumRows(); row++) {
-        createCreditRows(row, data);
+/** Applique mise en forme et statuts sur tout le tableau, en mémoire. */
+function refreshAllRows(data: TableData): void {
+    for (let row = 1; row <= getRowCount(data); row++) {
         setDebitRowFormat(row, data);
-        updateCreditRowStatus(row, data);
+    }
+
+    for (let row = 1; row <= getRowCount(data); row++) {
+        if (isDebtRow(data, row)) updateCreditRowStatus(row, data);
     }
 }
 
+function askSplitEqually(nbPaiements: number, totalAmount: number, absoluteRow: number): boolean {
+    if (DEBUG_MODE || nbPaiements === 1) return true;
+
+    const ui = SpreadsheetApp.getUi();
+
+    return (
+        ui.alert(
+            `Répartition des paiements (ligne: ${absoluteRow})`,
+            `Voulez-vous diviser le montant de ${totalAmount.toFixed(2)} € en ${nbPaiements} paiements égaux ?`,
+            ui.ButtonSet.YES_NO,
+        ) === ui.Button.YES
+    );
+}
+
 function createCreditRows(currentRow: number, data: ChargeData): void {
-    if (!isDebtRow(data) || (data.column !== COLUMNS.nbPaiments && data.column !== COLUMNS.montant)) return;
+    if (!isDebtRow(data, currentRow) || (data.column !== COLUMNS.nbPaiments && data.column !== COLUMNS.montant)) return;
 
-    const { absoluteRow, getCell, getA1, sheet } = data;
+    const { absoluteRow } = data;
 
-    const totalAmount = getCell(currentRow, COLUMNS.montant).getValue();
-    const nbPaiements = getCell(currentRow, COLUMNS.nbPaiments).getValue();
+    const totalAmount = getValue(data, currentRow, COLUMNS.montant);
+    const nbPaiements = getValue(data, currentRow, COLUMNS.nbPaiments);
 
     if (!isStrictPositiveNumber(nbPaiements) || !isStrictPositiveNumber(totalAmount)) return;
 
-    const isUserSelectedSplitEqualAmounts = (() => {
-        if (!DEBUG_MODE) {
-            const ui = SpreadsheetApp.getUi();
-
-            if (nbPaiements === 1) return SpreadsheetApp.getUi().Button.YES;
-
-            return ui.alert(
-                `Répartition des paiements (ligne: ${absoluteRow})`,
-                `Voulez-vous diviser le montant de ${totalAmount.toFixed(2)} € en ${nbPaiements} paiements égaux ?`,
-                ui.ButtonSet.YES_NO,
-            );
-        }
-
-        return null;
-    })();
-
     let nbCreditRows = 0;
-    while (
-        currentRow + nbCreditRows < data.table.dataRange.getNumRows()
-        && !isDebtRow({ ...data, row: currentRow + nbCreditRows + 1 })
-    ) {
+    while (currentRow + nbCreditRows < getRowCount(data) && !isDebtRow(data, currentRow + nbCreditRows + 1)) {
         nbCreditRows++;
     }
 
     if (nbPaiements === nbCreditRows) return;
 
-    if (nbPaiements - nbCreditRows > 0) {
-        // Insertion des n sous-lignes sous la ligne principale
-        sheet.insertRowsAfter(absoluteRow + nbCreditRows, nbPaiements - nbCreditRows);
-    }
+    const splitEqually = askSplitEqually(nbPaiements, totalAmount, absoluteRow);
 
-    const splitEqually = !DEBUG_MODE ? isUserSelectedSplitEqualAmounts === SpreadsheetApp.getUi().Button.YES : true;
+    const nbToInsert = nbPaiements - nbCreditRows;
+    if (nbToInsert > 0) {
+        // Insertion des n sous-lignes sous la ligne principale (une seule insertion côté feuille, à l'écriture)
+        const at = currentRow + nbCreditRows;
+        const newRows = (): unknown[][] => Array.from({ length: nbToInsert }, () => Array(data.nbColumns).fill(''));
+
+        data.values.splice(at, 0, ...newRows());
+        data.formulas.splice(at, 0, ...newRows().map(r => r.map(String)));
+        data.backgrounds.splice(
+            at,
+            0,
+            ...Array.from({ length: nbToInsert }, () => Array<string | null>(data.nbColumns).fill(null)),
+        );
+        data.inserted = { afterRow: at, count: nbToInsert };
+    }
 
     const equalAmount = splitEqually ? Math.floor((totalAmount / nbPaiements) * 100) / 100 : 0;
 
     // S'assurer que la ligne principale (parent) n'a pas de case à cocher dans la colonne Payé
-    tryCatch(() => {
-        getCell(currentRow, COLUMNS.paye).clearContent();
-        getCell(currentRow, COLUMNS.paye).clearDataValidations();
-    }, 'La cellule est verrouillée par le type de colonne.');
+    setValue(data, currentRow, COLUMNS.paye, '');
+    data.validationClearRows.push(currentRow);
 
+    let sumOfOthers = 0;
     for (let i = 1; i <= nbPaiements; i++) {
         const targetRow = currentRow + i;
-        const sommeCell = getCell(targetRow, COLUMNS.somme);
 
         // Gestion de la Somme (Colonne F)
         if (nbPaiements > 1) {
             if (i === nbPaiements) {
-                const startSumRow = currentRow + 1;
-                const endSumRow = currentRow + nbPaiements - 1;
-
-                const formulaSum = `=${getA1(currentRow, COLUMNS.montant)}-SUM(${getA1(startSumRow, COLUMNS.somme)}:${getA1(endSumRow, COLUMNS.somme)})`;
-                sommeCell.setFormula(formulaSum);
+                const formulaSum = `=${getA1(data, currentRow, COLUMNS.montant)}-SUM(${getA1(data, currentRow + 1, COLUMNS.somme)}:${getA1(data, currentRow + nbPaiements - 1, COLUMNS.somme)})`;
+                setValue(data, targetRow, COLUMNS.somme, totalAmount - sumOfOthers);
+                setFormula(data, targetRow, COLUMNS.somme, formulaSum);
+            } else if (splitEqually) {
+                setValue(data, targetRow, COLUMNS.somme, equalAmount);
+                sumOfOthers += equalAmount;
             } else {
-                if (splitEqually) {
-                    sommeCell.setValue(equalAmount);
-                }
+                sumOfOthers += Number(getValue(data, targetRow, COLUMNS.somme)) || 0;
             }
         } else {
-            sommeCell.setValue(totalAmount);
+            setValue(data, targetRow, COLUMNS.somme, totalAmount);
         }
-
-        // Insertion de la case à cocher dans la colonne Payé (G)
-        // tryCatch(() => sheet.getRange(targetRow, COL_PAYE).insertCheckboxes(), 'Colonne typée gère déjà les cases à cocher.');
     }
 }
 
-function setDebitRowFormat(currentRow: number, data: ChargeData): void {
-    const { table } = data;
-
-    const rowRange = getTableEntireRow(table.dataRange, currentRow);
-
-    if (!isDebtRow(data)) {
-        rowRange.setBackground(null); // Réinitialisation si vide
-        return;
-    }
-    tryCatch(
-        () => rowRange.setBackground(COLORS.debitRow),
-        'Erreur lors de la modification du fond gris de la ligne principale',
+function setDebitRowFormat(currentRow: number, data: TableData): void {
+    data.backgrounds[currentRow - 1] = Array<string | null>(data.nbColumns).fill(
+        isDebtRow(data, currentRow) ? COLORS.debitRow : null,
     );
 }
 
 /** Met à jour le statut, l'avancement et colore la case Montant parente en vert si 100% payé */
-function updateCreditRowStatus(currentRow: number, data: ChargeData): void {
-    if (isDebtRow(data)) return;
+function updateCreditRowStatus(debitRow: number, data: TableData): void {
+    const totalAmount = Number(getValue(data, debitRow, COLUMNS.montant));
+    const nbPaiements = getValue(data, debitRow, COLUMNS.nbPaiments);
 
-    const { getCell, toRelativeRow } = data;
+    if (!isStrictPositiveNumber(nbPaiements)) return;
 
-    const debitAmountCell = getCell(currentRow, COLUMNS.montant).getNextDataCell(SpreadsheetApp.Direction.UP);
-    const debitRow = toRelativeRow(debitAmountCell.getRow());
+    let sum = 0;
+    let isAllPaid = true;
 
-    const totalAmount = debitAmountCell.getValue();
-    const nbPaiements = getCell(debitRow, COLUMNS.nbPaiments).getValue();
+    for (let i = 1; i <= nbPaiements && debitRow + i <= getRowCount(data); i++) {
+        const row = debitRow + i;
+        if (isDebtRow(data, row)) break;
 
-    const setStatus = (row = 1, info: { sum: number; isAllPaid: boolean } = { sum: 0, isAllPaid: true }): boolean => {
-        if (row === nbPaiements + 1) return info.isAllPaid;
-
-        const isPaid = getCell(debitRow + row, COLUMNS.paye).getValue();
-        const amount = getCell(debitRow + row, COLUMNS.somme).getValue();
+        const isPaid = !!getValue(data, row, COLUMNS.paye);
+        const amount = Number(getValue(data, row, COLUMNS.somme)) || 0;
 
         if (isPaid && amount >= 0) {
-            const cumulatedCredits = info.sum + amount;
+            const cumulatedCredits = sum + amount;
             const remaining = totalAmount - cumulatedCredits;
             const progress = parseFloat(round(cumulatedCredits / totalAmount));
 
-            const textStatus = `${round(cumulatedCredits)} € / ${round(totalAmount)} € → reste: ${round(remaining)} €`;
-
-            getCell(debitRow + row, COLUMNS.remboursement).setValue(textStatus);
-            getCell(debitRow + row, COLUMNS.avancement).setValue(progress);
-
-            // tryCatch(() => { sheet.getRange(r, COL_AVANCEMENT).setNumberFormat('0.00%'); }, 'Colonne typée: impossible de changer le format');
+            setValue(
+                data,
+                row,
+                COLUMNS.remboursement,
+                `${round(cumulatedCredits)} € / ${round(totalAmount)} € → reste: ${round(remaining)} €`,
+            );
+            setValue(data, row, COLUMNS.avancement, progress);
         } else {
-            getCell(debitRow + row, COLUMNS.remboursement).clearContent();
-            getCell(debitRow + row, COLUMNS.avancement).clearContent();
+            setValue(data, row, COLUMNS.remboursement, '');
+            setValue(data, row, COLUMNS.avancement, '');
         }
 
-        return setStatus(row + 1, { sum: info.sum + amount, isAllPaid: info.isAllPaid && isPaid });
-    };
-
-    /*const getCreditsInfo = (row, info = { sum: 0, allPaid: true, debitAmountCell: null }) => {
-    if(isDebtRow({ ...data, row }))
-     return { ...info, debitAmountCell: getCell(row, COLUMNS.montant) };
-     
-     const isPaid = getCell(row, COLUMNS.somme).getValue();
-     const amount = getCell(row, COLUMNS.somme).getValue();
-
-     return getCreditsInfo(row - 1, { sum: info.sum + amount, allPaid: info.allPaid && isPaid });
-  }
-
-  const creditsInfo = getCreditsInfo(getCell(currentRow, COLUMNS.somme).getNextDataCell(SpreadsheetApp.Direction.DOWN).getRow());
-  // const debitAmountCell = getCell(currentRow, COLUMNS.montant).getNextDataCell(SpreadsheetApp.Direction.UP);
-  */
-    const isAllPaid = setStatus();
+        sum += amount;
+        isAllPaid = isAllPaid && isPaid;
+    }
 
     // Si tous les paiements de la série sont cochés (100% payé), on colore le montant parent en vert
-    tryCatch(() => {
-        if (isAllPaid) {
-            debitAmountCell.setBackground(COLORS.debitPaid);
-        } else {
-            debitAmountCell.setBackground(null); // Supprime la couleur si incomplet
-        }
-    }, 'Impossible de modifier la couleur de fond de la cellule Montant');
+    data.backgrounds[debitRow - 1][COLUMNS.montant - 1] = isAllPaid ? COLORS.debitPaid : COLORS.debitRow;
 }
-
-/* function setRemboursementFormulas({ currentRow }) {
-  // Injection des formules H et I avec des points-virgules stricts (syntaxe française)
-  const startRowRange = currentRow + 1;
-  
-  // Formule H : Remboursement effectué
-  const formulaH = `=IF(${_getA1(targetRow, COLUMNS.paye)}=TRUE; TEXT(SUMIF(${_get$A1(startRowRange, COLUMNS.paye)}:${_getA1(targetRow, COLUMNS.paye)}; TRUE; ${_get$A1(startRowRange, COLUMNS.somme)}:${_get$A1(targetRow, COLUMNS.somme)}); "# ##0 €") & " / " & TEXT(${_get$A1(targetRow, COLUMNS.montant)}; "# ##0 €") & " → " & TEXT(${_get$A1(targetRow, COLUMNS.montant)} - SUMIF(${_get$A1(startRowRange, COLUMNS.paye)}:${_getA1(targetRow, COLUMNS.paye)}; TRUE; ${_get$A1(startRowRange, COLUMNS.somme)}:${_getA1(targetRow, COLUMNS.somme)}); "# ##0 €"); "")`;
-
-  const formulaI = `=IF(${_get$A1(targetRow, COLUMNS.paye)}=TRUE; SUMIF(${_get$A1(startRowRange, COLUMNS.paye)}:${_getA1(targetRow, COLUMNS.paye)}; TRUE; ${_get$A1(startRowRange, COLUMNS.somme)}:${_getA1(targetRow, COLUMNS.somme)}) / ${_get$A1(currentRow, COLUMNS.montant)}; "")`;
-
-  getTableCell(table.dataRange, { row: targetRow, column: COLUMNS.remboursement }).setFormula(formulaH);
-  getTableCell(table.dataRange, { row: targetRow, column: COLUMNS.avancement }).setFormula(formulaI);
-}*/
