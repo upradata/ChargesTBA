@@ -188,17 +188,17 @@ function v2InstallValidations(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): voi
     const body = (key: V2TableKey, id: string) => v2Sheet(ss, key).getRange(2, v2ColIndex(key, id), V2_MAX_ROWS - 1, 1);
     const dateRule = SpreadsheetApp.newDataValidation()
         .requireDate()
-        .setAllowInvalid(true)
+        .setAllowInvalid(false)
         .setHelpText('Saisissez une date valide (jj/mm/aaaa).')
         .build();
     const numberRule = SpreadsheetApp.newDataValidation()
         .requireNumberBetween(-10000000, 10000000)
-        .setAllowInvalid(true)
+        .setAllowInvalid(false)
         .setHelpText('Saisissez un montant en euros.')
         .build();
     const positiveRule = SpreadsheetApp.newDataValidation()
         .requireNumberGreaterThan(0)
-        .setAllowInvalid(true)
+        .setAllowInvalid(false)
         .setHelpText('Le montant dû doit être strictement positif.')
         .build();
 
