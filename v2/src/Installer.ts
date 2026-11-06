@@ -77,7 +77,7 @@ let v2SeparatorCache: string | null = null;
 /** SetFormula expects the spreadsheet locale's separators (";" in French), so probe once with a scratch cell. */
 function v2FormulaSeparator(): string {
     if (v2SeparatorCache) return v2SeparatorCache;
-    const cell = v2Sheet(SpreadsheetApp.getActiveSpreadsheet(), 'params').getRange('G1');
+    const cell = v2Sheet(SpreadsheetApp.getActiveSpreadsheet(), 'params').getRange('J1');
     cell.setFormula('=SUM(1,2)');
     SpreadsheetApp.flush();
     v2SeparatorCache = cell.getValue() === 3 ? ',' : ';';
@@ -91,9 +91,9 @@ const v2LocalizeFormulas = (formulas: string[][]): string[][] => formulas.map(ro
 
 function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     const sheet = v2Sheet(ss, 'params');
-    sheet.getRange('C1:F').clear();
+    sheet.getRange('C1:G').clear();
     sheet
-        .getRange('A1:F1')
+        .getRange('A1:G1')
         .setValues([
             [
                 'Types de paiement',
@@ -102,6 +102,7 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
                 'Liste des paiements',
                 'Filtre catégorie',
                 'Charges (avec dû et reste)',
+                'Paiements (avec montant et reste)',
             ],
         ]);
     if (sheet.getRange('A2').isBlank() && sheet.getRange('B2').isBlank()) {
@@ -133,12 +134,21 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
             v2LocalizeFormula(
                 `=IFERROR(LET(k,${chargeKeys},r,${chargeRest},m,${v2Ref('charges', 'montant')},`
                     + `l,MAP(k,m,r,LAMBDA(a,b,c,IF(a="","",a&" | dû "&FIXED(b,2,TRUE)&" € | reste "&FIXED(N(c),2,TRUE)&" €"))),`
-                    + `a,IFERROR(SORT(FILTER(l,k<>"",r>0)),""),b,IFERROR(SORT(FILTER(l,k<>"",r<=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+                    + `SORT(FILTER(l,k<>"",r>0))),"")`,
+            ),
+        );
+    sheet
+        .getRange('G2')
+        .setFormula(
+            v2LocalizeFormula(
+                `=IFERROR(LET(k,${paymentKeys},r,${paymentRest},m,${v2Ref('paiements', 'montant')},`
+                    + `l,MAP(k,m,r,LAMBDA(a,b,c,IF(a="","",a&" | montant "&FIXED(b,2,TRUE)&" € | reste "&FIXED(N(c),2,TRUE)&" €"))),`
+                    + `SORT(FILTER(l,k<>"",r<>0))),"")`,
             ),
         );
     sheet.getRange('E2').setFormula(v2LocalizeFormula(`=LET(c,B2:B100,{"${V2_ALL_CATEGORIES}";FILTER(c,c<>"")})`));
     sheet
-        .getRange('A1:F1')
+        .getRange('A1:G1')
         .setFontWeight('bold')
         .setBackground(V2_COLORS.calcHeader)
         .setFontColor(V2_COLORS.headerFont);
@@ -150,6 +160,7 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     sheet.setColumnWidths(3, 2, 320);
     sheet.setColumnWidth(5, 160);
     sheet.setColumnWidth(6, 420);
+    sheet.setColumnWidth(7, 420);
     sheet.setFrozenRows(1);
     sheet.setTabColor('#9aa0a6');
 }
@@ -200,7 +211,7 @@ function v2InstallValidations(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): voi
     const params = v2Sheet(ss, 'params');
     const chargeList = params.getRange(V2_PARAMS_RANGES.chargeList);
     const chargeDisplayList = params.getRange(V2_PARAMS_RANGES.chargeDisplayList);
-    const paymentList = params.getRange(V2_PARAMS_RANGES.paymentList);
+    const paymentDisplayList = params.getRange(V2_PARAMS_RANGES.paymentDisplayList);
     const types = params.getRange(V2_PARAMS_RANGES.types);
     const categories = params.getRange(V2_PARAMS_RANGES.categories);
     const body = (key: V2TableKey, id: string) => v2Sheet(ss, key).getRange(2, v2ColIndex(key, id), V2_MAX_ROWS - 1, 1);
@@ -226,7 +237,7 @@ function v2InstallValidations(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): voi
     body('charges', 'date').setDataValidation(dateRule);
     body('charges', 'montant').setDataValidation(positiveRule);
     body('charges', 'categorie').setDataValidation(v2ListValidation(categories));
-    body('affectations', 'paiement').setDataValidation(v2ListValidation(paymentList));
+    body('affectations', 'paiement').setDataValidation(v2ListValidation(paymentDisplayList));
     body('affectations', 'charge').setDataValidation(v2ListValidation(chargeDisplayList));
     body('affectations', 'montant').setDataValidation(numberRule);
     body('echeances', 'charge').setDataValidation(v2ListValidation(chargeList));

@@ -132,6 +132,7 @@ const V2_PARAMS_RANGES = {
     chargeList: 'C2:C1000',
     chargeDisplayList: 'F2:F1000',
     paymentList: 'D2:D1000',
+    paymentDisplayList: 'G2:G1000',
     categoryFilter: 'E2:E100',
 };
 
@@ -188,7 +189,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Somme déjà répartie sur des charges (onglet Affectations). Calculé.',
                 formula: () =>
-                    `=MAP(${v2PaymentCol('cle')},LAMBDA(key,IF(key="","",SUMIFS(${v2Ref('affectations', 'montant')},${v2Ref('affectations', 'paiement')},key))))`,
+                    `=MAP(${v2PaymentCol('cle')},LAMBDA(key,IF(key="","",SUMIFS(${v2Ref('affectations', 'montant')},${v2Ref('affectations', 'paiementCle')},key))))`,
             },
             {
                 id: 'nonAlloue',
@@ -385,7 +386,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Ce qu’il reste à répartir sur ce paiement (toutes lignes comprises). Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},LAMBDA(pay,IF(pay="","",IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)=0,"?",SUMIFS(${v2Ref('paiements', 'nonAlloue')},${v2Ref('paiements', 'cle')},pay)))))`,
+                    `=MAP(${v2AllocationCol('paiementCle')},LAMBDA(pay,IF(pay="","",IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)=0,"?",SUMIFS(${v2Ref('paiements', 'nonAlloue')},${v2Ref('paiements', 'cle')},pay)))))`,
             },
             {
                 id: 'reste',
@@ -405,7 +406,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Plus petit montant entre le non alloué du paiement et le reste dû de la charge (avant cette ligne). Calculé, non appliqué.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    `=MAP(${v2AllocationCol('paiementCle')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
                     + `LAMBDA(pay,ch,amt,np,rc,IF(OR(pay="",ch="",np="?",rc="?"),"",LET(ap,np+N(amt),ac,rc+N(amt),IF(ap>=0,ROUND(MAX(0,MIN(ap,ac)),2),ROUND(ap,2))))))`,
             },
             {
@@ -415,7 +416,7 @@ const V2_TABLES: V2TableDef[] = [
                 width: 260,
                 note: 'Cohérence de la ligne. Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    `=MAP(${v2AllocationCol('paiementCle')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
                     + `LAMBDA(pay,ch,amt,np,rc,IF(AND(pay="",ch="",amt=""),"",IF(pay="","✖ Choisir un paiement",IF(ch="","✖ Choisir une charge",`
                     + `IF(OR(np="?",rc="?"),"✖ Paiement ou charge introuvable (clé modifiée ?)",IF(amt="","⚠ Saisir un montant",`
                     + `IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)>1,"⚠ Paiement en doublon",`
@@ -430,7 +431,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.date,
                 note: 'Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},LAMBDA(pay,IF(pay="","",IFERROR(INDEX(${v2Ref('paiements', 'date')},MATCH(pay,${v2Ref('paiements', 'cle')},0)),""))))`,
+                    `=MAP(${v2AllocationCol('paiementCle')},LAMBDA(pay,IF(pay="","",IFERROR(INDEX(${v2Ref('paiements', 'date')},MATCH(pay,${v2Ref('paiements', 'cle')},0)),""))))`,
             },
             {
                 id: 'categorie',
@@ -449,6 +450,15 @@ const V2_TABLES: V2TableDef[] = [
                 note: 'Clé de la charge choisie (texte avant « | »). Calculé.',
                 formula: () =>
                     `=MAP(${v2AllocationCol('charge')},LAMBDA(ch,IF(ch="","",IFERROR(LEFT(ch,FIND(" | ",ch)-1),ch))))`,
+            },
+            {
+                id: 'paiementCle',
+                header: 'Clé du paiement',
+                kind: 'calc',
+                width: 260,
+                note: 'Clé du paiement choisi (texte avant « | »). Calculé.',
+                formula: () =>
+                    `=MAP(${v2AllocationCol('paiement')},LAMBDA(pay,IF(pay="","",IFERROR(LEFT(pay,FIND(" | ",pay)-1),pay))))`,
             },
         ],
     },
