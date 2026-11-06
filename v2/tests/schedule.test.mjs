@@ -69,6 +69,21 @@ test('formulas avoid locale-dependent TEXT format codes', () => {
     }
 });
 
+test('separator conversion handles arguments, array literals and strings', () => {
+    assert.equal(
+        run('v2ConvertSeparators(\'=IF(A1="a,b",SUM(1,2),{1,2;3,4})\', ";")'),
+        '=IF(A1="a,b";SUM(1;2);{1\\2;3\\4})',
+    );
+    assert.equal(run('v2ConvertSeparators("=SUM(1,2)", ",")'), '=SUM(1,2)');
+    const formulas = run(
+        'V2_TABLES.flatMap(t => t.columns.filter(c => c.kind === "calc").map(c => v2ConvertSeparators(c.formula(), ";")))',
+    );
+    assert.ok(
+        formulas.every(f => !/,(?=(?:[^"]*"[^"]*")*[^"]*$)/.test(f)),
+        'comma left outside strings',
+    );
+});
+
 test('column references resolve', () => {
     assert.equal(run("v2Col('charges', 'cle')"), 'F2:F');
     assert.equal(run("v2Ref('affectations', 'montant')"), "'Affectations'!$C$2:$C");

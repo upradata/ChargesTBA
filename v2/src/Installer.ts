@@ -72,6 +72,23 @@ function v2ListValidation(source: GoogleAppsScript.Spreadsheet.Range): GoogleApp
     return SpreadsheetApp.newDataValidation().requireValueInRange(source, true).setAllowInvalid(true).build();
 }
 
+let v2SeparatorCache: string | null = null;
+
+/** SetFormula expects the spreadsheet locale's separators (";" in French), so probe once with a scratch cell. */
+function v2FormulaSeparator(): string {
+    if (v2SeparatorCache) return v2SeparatorCache;
+    const cell = v2Sheet(SpreadsheetApp.getActiveSpreadsheet(), 'params').getRange('G1');
+    cell.setFormula('=SUM(1,2)');
+    SpreadsheetApp.flush();
+    v2SeparatorCache = cell.getValue() === 3 ? ',' : ';';
+    cell.clear();
+    return v2SeparatorCache;
+}
+
+const v2LocalizeFormula = (formula: string): string => v2ConvertSeparators(formula, v2FormulaSeparator());
+
+const v2LocalizeFormulas = (formulas: string[][]): string[][] => formulas.map(row => row.map(v2LocalizeFormula));
+
 function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     const sheet = v2Sheet(ss, 'params');
     sheet.getRange('C1:E').clear();
@@ -92,14 +109,18 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     sheet
         .getRange('C2')
         .setFormula(
-            `=IFERROR(LET(k,${chargeKeys},r,${chargeRest},a,IFERROR(SORT(FILTER(k,k<>"",r>0)),""),b,IFERROR(SORT(FILTER(k,k<>"",r<=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+            v2LocalizeFormula(
+                `=IFERROR(LET(k,${chargeKeys},r,${chargeRest},a,IFERROR(SORT(FILTER(k,k<>"",r>0)),""),b,IFERROR(SORT(FILTER(k,k<>"",r<=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+            ),
         );
     sheet
         .getRange('D2')
         .setFormula(
-            `=IFERROR(LET(k,${paymentKeys},r,${paymentRest},a,IFERROR(SORT(FILTER(k,k<>"",r<>0)),""),b,IFERROR(SORT(FILTER(k,k<>"",r=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+            v2LocalizeFormula(
+                `=IFERROR(LET(k,${paymentKeys},r,${paymentRest},a,IFERROR(SORT(FILTER(k,k<>"",r<>0)),""),b,IFERROR(SORT(FILTER(k,k<>"",r=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+            ),
         );
-    sheet.getRange('E2').setFormula(`=LET(c,B2:B100,{"${V2_ALL_CATEGORIES}";FILTER(c,c<>"")})`);
+    sheet.getRange('E2').setFormula(v2LocalizeFormula(`=LET(c,B2:B100,{"${V2_ALL_CATEGORIES}";FILTER(c,c<>"")})`));
     sheet
         .getRange('A1:E1')
         .setFontWeight('bold')
@@ -147,7 +168,7 @@ function v2InstallTable(
         if (col.format) body.setNumberFormat(col.format);
         if (col.kind === 'calc') {
             sheet.getRange(3, n, V2_MAX_ROWS - 2, 1).clearContent(); // free the cells the array formula spills into
-            sheet.getRange(2, n).setFormula(col.formula ? col.formula() : '');
+            sheet.getRange(2, n).setFormula(v2LocalizeFormula(col.formula ? col.formula() : ''));
             body.setBackground('#f8f9fa');
             body.protect().setWarningOnly(true).setDescription('Colonne calculée');
         }
@@ -240,17 +261,21 @@ function v2InstallViews(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     byCharge
         .getRange('A2')
         .setFormula(
-            `=IFERROR(SORT(FILTER({${['categorie', 'libelle', 'montant', 'paye', 'reste', 'solde', 'retard', 'statut'].map(charge).join(',')}},${charge('cle')}<>""),7,FALSE,5,FALSE),"")`,
+            v2LocalizeFormula(
+                `=IFERROR(SORT(FILTER({${['categorie', 'libelle', 'montant', 'paye', 'reste', 'solde', 'retard', 'statut'].map(charge).join(',')}},${charge('cle')}<>""),7,FALSE,5,FALSE),"")`,
+            ),
         );
     byCharge.getRange('J1:N1').setValues([['Catégorie', 'Dû', 'Payé', 'Reste', 'Retard']]);
     byCharge
         .getRange('J2')
         .setFormula(
-            `=IFERROR(LET(u,UNIQUE(FILTER(${charge('categorie')},${charge('cle')}<>"")),HSTACK(u,`
-                + ['montant', 'paye', 'reste', 'retard']
-                    .map(id => `MAP(u,LAMBDA(c,SUMIFS(${charge(id)},${charge('categorie')},c)))`)
-                    .join(',')
-                + `)),"")`,
+            v2LocalizeFormula(
+                `=IFERROR(LET(u,UNIQUE(FILTER(${charge('categorie')},${charge('cle')}<>"")),HSTACK(u,`
+                    + ['montant', 'paye', 'reste', 'retard']
+                        .map(id => `MAP(u,LAMBDA(c,SUMIFS(${charge(id)},${charge('categorie')},c)))`)
+                        .join(',')
+                    + `)),"")`,
+            ),
         );
     byCharge
         .getRange('A1:H1')
@@ -292,10 +317,12 @@ function v2InstallViews(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     timeline
         .getRange('A2')
         .setFormula(
-            `=IFERROR(LET(cd,${chargeDate},pd,${payFilter('date')},`
-                + `ev,SORT({cd,ARRAYFORMULA(IF(cd<>"","Charge","")),${chargeLabel},-${chargeAmount};`
-                + `pd,ARRAYFORMULA(IF(pd<>"","Paiement","")),${payFilter('type')},${payFilter('montant')}},1,TRUE),`
-                + `HSTACK(ev,SCAN(0,INDEX(ev,0,4),LAMBDA(a,v,a+N(v))))),"")`,
+            v2LocalizeFormula(
+                `=IFERROR(LET(cd,${chargeDate},pd,${payFilter('date')},`
+                    + `ev,SORT({cd,ARRAYFORMULA(IF(cd<>"","Charge","")),${chargeLabel},-${chargeAmount};`
+                    + `pd,ARRAYFORMULA(IF(pd<>"","Paiement","")),${payFilter('type')},${payFilter('montant')}},1,TRUE),`
+                    + `HSTACK(ev,SCAN(0,INDEX(ev,0,4),LAMBDA(a,v,a+N(v))))),"")`,
+            ),
         );
     timeline
         .getRange('A1:E1')
@@ -349,15 +376,17 @@ function v2InstallDashboard(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void 
         ]);
     sheet
         .getRange('B3:B9')
-        .setFormulas([
-            [`=SUM(${charge('montant')})`],
-            [`=SUM(${pay('montant')})`],
-            ['=B4-B3'],
-            [`=SUM(${charge('retard')})`],
-            [`=SUM(${pay('nonAlloue')})`],
-            [`=COUNTIF(${charge('statut')},"⚠*")`],
-            [`=COUNTIFS(${charge('reste')},">0")`],
-        ]);
+        .setFormulas(
+            v2LocalizeFormulas([
+                [`=SUM(${charge('montant')})`],
+                [`=SUM(${pay('montant')})`],
+                ['=B4-B3'],
+                [`=SUM(${charge('retard')})`],
+                [`=SUM(${pay('nonAlloue')})`],
+                [`=COUNTIF(${charge('statut')},"⚠*")`],
+                [`=COUNTIFS(${charge('reste')},">0")`],
+            ]),
+        );
     sheet.getRange('B3:B7').setNumberFormat(V2_FORMATS.eur);
     sheet.getRange('B5').setNumberFormat(V2_FORMATS.signed);
 
@@ -385,28 +414,32 @@ function v2InstallDashboard(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void 
     // Defaults to the current quarter; overwrite the cells to look at another period.
     sheet
         .getRange('B14')
-        .setFormula(existing[0][0] || '=DATE(YEAR(TODAY()),FLOOR((MONTH(TODAY())-1)/3)*3+1,1)')
+        .setFormula(v2LocalizeFormula(existing[0][0] || '=DATE(YEAR(TODAY()),FLOOR((MONTH(TODAY())-1)/3)*3+1,1)'))
         .setBackground('#e8f0fe');
     sheet
         .getRange('B15')
-        .setFormula(existing[1][0] || '=EDATE(B14,3)-1')
+        .setFormula(v2LocalizeFormula(existing[1][0] || '=EDATE(B14,3)-1'))
         .setBackground('#e8f0fe');
     sheet.getRange('B14:B15').setNumberFormat(V2_FORMATS.date);
     const crit = `IF($B$13="${V2_ALL_CATEGORIES}","*",$B$13)`;
     sheet
         .getRange('B16')
         .setFormula(
-            `=SUMIFS(${sched('montant')},${sched('date')},">="&$B$14,${sched('date')},"<="&$B$15,${sched('categorie')},${crit})`
-                + `+SUM(MAP(${charge('cle')},${charge('date')},${charge('categorie')},${charge('montant')},LAMBDA(k,d,c,m,`
-                + `IF(k="",0,IF(AND(COUNTIF(${sched('charge')},k)=0,d>=$B$14,d<=$B$15,OR($B$13="${V2_ALL_CATEGORIES}",c=$B$13)),m,0)))))`,
+            v2LocalizeFormula(
+                `=SUMIFS(${sched('montant')},${sched('date')},">="&$B$14,${sched('date')},"<="&$B$15,${sched('categorie')},${crit})`
+                    + `+SUM(MAP(${charge('cle')},${charge('date')},${charge('categorie')},${charge('montant')},LAMBDA(k,d,c,m,`
+                    + `IF(k="",0,IF(AND(COUNTIF(${sched('charge')},k)=0,d>=$B$14,d<=$B$15,OR($B$13="${V2_ALL_CATEGORIES}",c=$B$13)),m,0)))))`,
+            ),
         );
     sheet
         .getRange('B17')
         .setFormula(
-            `=SUMIFS(${alloc('montant')},${alloc('datePaiement')},">="&$B$14,${alloc('datePaiement')},"<="&$B$15,${alloc('categorie')},${crit})`,
+            v2LocalizeFormula(
+                `=SUMIFS(${alloc('montant')},${alloc('datePaiement')},">="&$B$14,${alloc('datePaiement')},"<="&$B$15,${alloc('categorie')},${crit})`,
+            ),
         );
-    sheet.getRange('B18').setFormula('=B17-B16');
-    sheet.getRange('B19').setFormula('=IF(B16=0,"",B17/B16)').setNumberFormat('0%');
+    sheet.getRange('B18').setFormula(v2LocalizeFormula('=B17-B16'));
+    sheet.getRange('B19').setFormula(v2LocalizeFormula('=IF(B16=0,"",B17/B16)')).setNumberFormat('0%');
     sheet.getRange('B16:B17').setNumberFormat(V2_FORMATS.eur);
     sheet.getRange('B18').setNumberFormat(V2_FORMATS.signed);
 

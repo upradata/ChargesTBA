@@ -62,6 +62,27 @@ type V2TableDef = { key: V2TableKey; columns: V2Column[] };
 const v2IsoText = (expr: string): string =>
     `YEAR(${expr})&"-"&RIGHT("0"&MONTH(${expr}),2)&"-"&RIGHT("0"&DAY(${expr}),2)`;
 
+/** Converts US-style separators to the locale's: argument "," becomes ";" and array column "," becomes "\\". */
+function v2ConvertSeparators(formula: string, separator: string): string {
+    if (separator === ',') return formula;
+    const stack: string[] = [];
+    let inString = false;
+    let out = '';
+    for (const ch of formula) {
+        if (inString) {
+            if (ch === '"') inString = false;
+        } else if (ch === '"') inString = true;
+        else if (ch === '(' || ch === '{') stack.push(ch);
+        else if (ch === ')' || ch === '}') stack.pop();
+        else if (ch === ',') {
+            out += stack[stack.length - 1] === '{' ? '\\' : ';';
+            continue;
+        }
+        out += ch;
+    }
+    return out;
+}
+
 function v2Letter(index: number): string {
     let letters = '';
     for (let n = index; n > 0; n = Math.floor((n - 1) / 26)) {
