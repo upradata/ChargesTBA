@@ -62,6 +62,13 @@ test('schema formulas have balanced parentheses and quotes', () => {
     }
 });
 
+test('formulas avoid locale-dependent TEXT format codes', () => {
+    const formulas = run('V2_TABLES.flatMap(t => t.columns.filter(c => c.kind === "calc").map(c => c.formula()))');
+    for (const f of formulas) {
+        assert.ok(!/TEXT\([^)]*"(yyyy|0\.00)/.test(f), `locale-dependent TEXT in ${f}`);
+    }
+});
+
 test('column references resolve', () => {
     assert.equal(run("v2Col('charges', 'cle')"), 'F2:F');
     assert.equal(run("v2Ref('affectations', 'montant')"), "'Affectations'!$C$2:$C");

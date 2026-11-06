@@ -58,6 +58,10 @@ type V2Column = {
 
 type V2TableDef = { key: V2TableKey; columns: V2Column[] };
 
+/** Locale-independent ISO date text (TEXT format codes are localized, e.g. "aaaa" in French). */
+const v2IsoText = (expr: string): string =>
+    `YEAR(${expr})&"-"&RIGHT("0"&MONTH(${expr}),2)&"-"&RIGHT("0"&DAY(${expr}),2)`;
+
 function v2Letter(index: number): string {
     let letters = '';
     for (let n = index; n > 0; n = Math.floor((n - 1) / 26)) {
@@ -146,7 +150,7 @@ const V2_TABLES: V2TableDef[] = [
                 note: 'Identifiant lisible utilisé par les affectations (date · type · montant). Calculé.',
                 formula: () =>
                     `=MAP(${v2PaymentCol('date')},${v2PaymentCol('type')},${v2PaymentCol('montant')},${v2PaymentCol('ref')},`
-                    + `LAMBDA(dt,typ,amt,ref,IF(dt="","",TEXT(dt,"yyyy-mm-dd")&" · "&typ&" · "&TEXT(amt,"0.00")&IF(ref="",""," · "&ref))))`,
+                    + `LAMBDA(dt,typ,amt,ref,IF(dt="","",${v2IsoText('dt')}&" · "&typ&" · "&FIXED(amt,2,TRUE)&IF(ref="",""," · "&ref))))`,
             },
             {
                 id: 'affecte',
@@ -222,7 +226,7 @@ const V2_TABLES: V2TableDef[] = [
                 width: 260,
                 note: 'Identifiant lisible utilisé par les affectations et échéances (date · libellé). Calculé.',
                 formula: () =>
-                    `=MAP(${v2ChargeCol('date')},${v2ChargeCol('libelle')},LAMBDA(dt,lib,IF(dt="","",TEXT(dt,"yyyy-mm-dd")&" · "&lib)))`,
+                    `=MAP(${v2ChargeCol('date')},${v2ChargeCol('libelle')},LAMBDA(dt,lib,IF(dt="","",${v2IsoText('dt')}&" · "&lib)))`,
             },
             {
                 id: 'paye',
@@ -486,7 +490,7 @@ const V2_TABLES: V2TableDef[] = [
                 formula: () =>
                     `=MAP(${v2ScheduleCol('charge')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"✖ Charge introuvable (clé modifiée ?)",`
                     + `LET(tot,SUMIFS(${v2ScheduleCol('montant')},${v2ScheduleCol('charge')},ch),due,SUMIFS(${v2Ref('charges', 'montant')},${v2Ref('charges', 'cle')},ch),`
-                    + `IF(ABS(tot-due)>0.005,"⚠ Total échéances ≠ dû ("&TEXT(tot-due,"+0.00;-0.00")&")","✔"))))))`,
+                    + `IF(ABS(tot-due)>0.005,"⚠ Total échéances ≠ dû ("&FIXED(tot-due,2,TRUE)&")","✔"))))))`,
             },
         ],
     },
