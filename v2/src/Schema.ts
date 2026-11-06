@@ -115,6 +115,12 @@ function v2Ref(key: V2TableKey, id: string): string {
     return `'${V2_SHEET_NAMES[key]}'!$${letter}$2:$${letter}`;
 }
 
+/** Charge cells may hold "clé | dû … | reste …" (dropdown label); the key is the part before the first " | ". */
+const v2ChargeKeyOf = (cell: string): string => {
+    const at = cell.indexOf(' | ');
+    return at < 0 ? cell : cell.slice(0, at);
+};
+
 const v2PaymentCol = (id: string): string => v2Col('paiements', id);
 const v2ChargeCol = (id: string): string => v2Col('charges', id);
 const v2AllocationCol = (id: string): string => v2Col('affectations', id);
@@ -124,6 +130,7 @@ const V2_PARAMS_RANGES = {
     types: 'A2:A100',
     categories: 'B2:B100',
     chargeList: 'C2:C1000',
+    chargeDisplayList: 'F2:F1000',
     paymentList: 'D2:D1000',
     categoryFilter: 'E2:E100',
 };
@@ -257,7 +264,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Somme des affectations vers cette charge (remboursements déduits). Calculé.',
                 formula: () =>
-                    `=MAP(${v2ChargeCol('cle')},LAMBDA(key,IF(key="","",SUMIFS(${v2Ref('affectations', 'montant')},${v2Ref('affectations', 'charge')},key))))`,
+                    `=MAP(${v2ChargeCol('cle')},LAMBDA(key,IF(key="","",SUMIFS(${v2Ref('affectations', 'montant')},${v2Ref('affectations', 'chargeCle')},key))))`,
             },
             {
                 id: 'reste',
@@ -388,7 +395,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Ce qu’il reste à payer sur cette charge (toutes lignes comprises). Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('charge')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"?",SUMIFS(${v2Ref('charges', 'reste')},${v2Ref('charges', 'cle')},ch)))))`,
+                    `=MAP(${v2AllocationCol('chargeCle')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"?",SUMIFS(${v2Ref('charges', 'reste')},${v2Ref('charges', 'cle')},ch)))))`,
             },
             {
                 id: 'suggestion',
@@ -398,7 +405,7 @@ const V2_TABLES: V2TableDef[] = [
                 format: V2_FORMATS.eur,
                 note: 'Plus petit montant entre le non alloué du paiement et le reste dû de la charge (avant cette ligne). Calculé, non appliqué.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
                     + `LAMBDA(pay,ch,amt,np,rc,IF(OR(pay="",ch="",np="?",rc="?"),"",LET(ap,np+N(amt),ac,rc+N(amt),IF(ap>=0,ROUND(MAX(0,MIN(ap,ac)),2),ROUND(ap,2))))))`,
             },
             {
@@ -408,7 +415,7 @@ const V2_TABLES: V2TableDef[] = [
                 width: 260,
                 note: 'Cohérence de la ligne. Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('charge')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
+                    `=MAP(${v2AllocationCol('paiement')},${v2AllocationCol('chargeCle')},${v2AllocationCol('montant')},${v2AllocationCol('nonAlloue')},${v2AllocationCol('reste')},`
                     + `LAMBDA(pay,ch,amt,np,rc,IF(AND(pay="",ch="",amt=""),"",IF(pay="","✖ Choisir un paiement",IF(ch="","✖ Choisir une charge",`
                     + `IF(OR(np="?",rc="?"),"✖ Paiement ou charge introuvable (clé modifiée ?)",IF(amt="","⚠ Saisir un montant",`
                     + `IF(COUNTIF(${v2Ref('paiements', 'cle')},pay)>1,"⚠ Paiement en doublon",`
@@ -432,7 +439,16 @@ const V2_TABLES: V2TableDef[] = [
                 width: 140,
                 note: 'Calculé.',
                 formula: () =>
-                    `=MAP(${v2AllocationCol('charge')},LAMBDA(ch,IF(ch="","",IFERROR(INDEX(${v2Ref('charges', 'categorie')},MATCH(ch,${v2Ref('charges', 'cle')},0)),""))))`,
+                    `=MAP(${v2AllocationCol('chargeCle')},LAMBDA(ch,IF(ch="","",IFERROR(INDEX(${v2Ref('charges', 'categorie')},MATCH(ch,${v2Ref('charges', 'cle')},0)),""))))`,
+            },
+            {
+                id: 'chargeCle',
+                header: 'Clé de la charge',
+                kind: 'calc',
+                width: 260,
+                note: 'Clé de la charge choisie (texte avant « | »). Calculé.',
+                formula: () =>
+                    `=MAP(${v2AllocationCol('charge')},LAMBDA(ch,IF(ch="","",IFERROR(LEFT(ch,FIND(" | ",ch)-1),ch))))`,
             },
         ],
     },

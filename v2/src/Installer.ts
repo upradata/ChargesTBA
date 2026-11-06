@@ -91,11 +91,18 @@ const v2LocalizeFormulas = (formulas: string[][]): string[][] => formulas.map(ro
 
 function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     const sheet = v2Sheet(ss, 'params');
-    sheet.getRange('C1:E').clear();
+    sheet.getRange('C1:F').clear();
     sheet
-        .getRange('A1:E1')
+        .getRange('A1:F1')
         .setValues([
-            ['Types de paiement', 'Catégories', 'Liste des charges', 'Liste des paiements', 'Filtre catégorie'],
+            [
+                'Types de paiement',
+                'Catégories',
+                'Liste des charges',
+                'Liste des paiements',
+                'Filtre catégorie',
+                'Charges (avec dû et reste)',
+            ],
         ]);
     if (sheet.getRange('A2').isBlank() && sheet.getRange('B2').isBlank()) {
         sheet.getRange(2, 1, V2_DEFAULT_TYPES.length, 1).setValues(V2_DEFAULT_TYPES.map(t => [t]));
@@ -120,9 +127,18 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
                 `=IFERROR(LET(k,${paymentKeys},r,${paymentRest},a,IFERROR(SORT(FILTER(k,k<>"",r<>0)),""),b,IFERROR(SORT(FILTER(k,k<>"",r=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
             ),
         );
+    sheet
+        .getRange('F2')
+        .setFormula(
+            v2LocalizeFormula(
+                `=IFERROR(LET(k,${chargeKeys},r,${chargeRest},m,${v2Ref('charges', 'montant')},`
+                    + `l,MAP(k,m,r,LAMBDA(a,b,c,IF(a="","",a&" | dû "&FIXED(b,2,TRUE)&" € | reste "&FIXED(N(c),2,TRUE)&" €"))),`
+                    + `a,IFERROR(SORT(FILTER(l,k<>"",r>0)),""),b,IFERROR(SORT(FILTER(l,k<>"",r<=0)),""),x,{a;b},FILTER(x,x<>"")),"")`,
+            ),
+        );
     sheet.getRange('E2').setFormula(v2LocalizeFormula(`=LET(c,B2:B100,{"${V2_ALL_CATEGORIES}";FILTER(c,c<>"")})`));
     sheet
-        .getRange('A1:E1')
+        .getRange('A1:F1')
         .setFontWeight('bold')
         .setBackground(V2_COLORS.calcHeader)
         .setFontColor(V2_COLORS.headerFont);
@@ -133,6 +149,7 @@ function v2InstallParams(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     sheet.setColumnWidths(1, 2, 160);
     sheet.setColumnWidths(3, 2, 320);
     sheet.setColumnWidth(5, 160);
+    sheet.setColumnWidth(6, 420);
     sheet.setFrozenRows(1);
     sheet.setTabColor('#9aa0a6');
 }
@@ -182,6 +199,7 @@ function v2InstallTable(
 function v2InstallValidations(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
     const params = v2Sheet(ss, 'params');
     const chargeList = params.getRange(V2_PARAMS_RANGES.chargeList);
+    const chargeDisplayList = params.getRange(V2_PARAMS_RANGES.chargeDisplayList);
     const paymentList = params.getRange(V2_PARAMS_RANGES.paymentList);
     const types = params.getRange(V2_PARAMS_RANGES.types);
     const categories = params.getRange(V2_PARAMS_RANGES.categories);
@@ -209,7 +227,7 @@ function v2InstallValidations(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): voi
     body('charges', 'montant').setDataValidation(positiveRule);
     body('charges', 'categorie').setDataValidation(v2ListValidation(categories));
     body('affectations', 'paiement').setDataValidation(v2ListValidation(paymentList));
-    body('affectations', 'charge').setDataValidation(v2ListValidation(chargeList));
+    body('affectations', 'charge').setDataValidation(v2ListValidation(chargeDisplayList));
     body('affectations', 'montant').setDataValidation(numberRule);
     body('echeances', 'charge').setDataValidation(v2ListValidation(chargeList));
     body('echeances', 'date').setDataValidation(dateRule);

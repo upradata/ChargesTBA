@@ -75,7 +75,7 @@ function v2SelfCheck(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): string[] {
     };
     allocationRows.forEach((r, n) => {
         const payment = paymentKeys.indexOf(String(r[0]));
-        const charge = chargeKeys.indexOf(String(r[1]));
+        const charge = chargeKeys.indexOf(v2ChargeKeyOf(String(r[1])));
         if (payment < 0 || charge < 0) problems.push(`Affectations ligne ${n + 2} : paiement ou charge introuvable`);
         else input.allocations.push({ payment, charge, montant: num(r[2]) });
     });
