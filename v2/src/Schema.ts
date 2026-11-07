@@ -525,7 +525,7 @@ const V2_TABLES: V2TableDef[] = [
                 note: 'Calculé.',
                 formula: () =>
                     `=MAP(${v2ScheduleCol('charge')},${v2ScheduleCol('date')},${v2ScheduleCol('montant')},${v2ScheduleCol('cumul')},${v2ScheduleCol('paye')},`
-                    + `LAMBDA(ch,dt,amt,cum,paid,IF(OR(ch="",dt=""),"",IF(paid>=cum-0.005,"${V2_STATUS.scheduleDone}",`
+                    + `LAMBDA(ch,dt,amt,cum,paid,IF(OR(ch="",dt=""),"",IF(paid>=cum-5/1000,"${V2_STATUS.scheduleDone}",`
                     + `IF(dt<=TODAY(),IF(paid>cum-N(amt),"${V2_STATUS.schedulePartial}","${V2_STATUS.scheduleLate}"),"${V2_STATUS.scheduleUpcoming}")))))`,
             },
             {
@@ -537,7 +537,7 @@ const V2_TABLES: V2TableDef[] = [
                 formula: () =>
                     `=MAP(${v2ScheduleCol('charge')},LAMBDA(ch,IF(ch="","",IF(COUNTIF(${v2Ref('charges', 'cle')},ch)=0,"✖ Charge introuvable (clé modifiée ?)",`
                     + `LET(tot,SUMIFS(${v2ScheduleCol('montant')},${v2ScheduleCol('charge')},ch),due,SUMIFS(${v2Ref('charges', 'montant')},${v2Ref('charges', 'cle')},ch),`
-                    + `IF(ABS(tot-due)>0.005,"⚠ Total échéances ≠ dû ("&FIXED(tot-due,2,TRUE)&")","✔"))))))`,
+                    + `IF(ABS(tot-due)>5/1000,"⚠ Total échéances ≠ dû ("&FIXED(tot-due,2,TRUE)&")","✔"))))))`,
             },
         ],
     },
