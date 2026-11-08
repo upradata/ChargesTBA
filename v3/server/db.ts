@@ -22,6 +22,7 @@ export const payments = sqliteTable('payments', {
     userId: text('user_id').notNull(),
     date: text('date').notNull(),
     category: text('category').notNull(),
+    label: text('label'),
     amount: integer('amount').notNull(),
 });
 
@@ -65,12 +66,19 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
         PRAGMA user_version = 1;
       `);
         })();
-    } else if (version !== 1 && version !== 2) {
+    } else if (version !== 1 && version !== 2 && version !== 3) {
         throw new Error(`Version de base de données non prise en charge : ${String(version)}`);
     }
-    if (version === 0 || version === 1) {
+    if (version === 0 || version === 1 || version === 2) {
         sqlite.transaction(() => {
-            sqlite.exec(`
+            const columns = sqlite.pragma('table_info(payments)') as { name: string }[];
+            if (!columns.some(column => column.name === 'label'))
+                sqlite.exec('ALTER TABLE payments ADD COLUMN label TEXT');
+            const hasSchedules = sqlite
+                .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'charge_installments'")
+                .get();
+            if (!hasSchedules) {
+                sqlite.exec(`
                 CREATE TABLE charge_installments (
                     charge_id TEXT NOT NULL REFERENCES charges(id) ON DELETE CASCADE,
                     position INTEGER NOT NULL, date TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount > 0),
@@ -89,19 +97,20 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
                     user_id TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE
                 );
             `);
-            const insert = sqlite.prepare('INSERT INTO charge_installments VALUES (?, ?, ?, ?)');
-            const rows = sqlite.prepare('SELECT id, date, amount, installments FROM charges').all() as {
-                id: string;
-                date: string;
-                amount: number;
-                installments: number;
-            }[];
-            for (const row of rows) {
-                splitCents(row.amount, row.installments).forEach((part, index) =>
-                    insert.run(row.id, index, addMonths(row.date, index), part),
-                );
+                const insert = sqlite.prepare('INSERT INTO charge_installments VALUES (?, ?, ?, ?)');
+                const rows = sqlite.prepare('SELECT id, date, amount, installments FROM charges').all() as {
+                    id: string;
+                    date: string;
+                    amount: number;
+                    installments: number;
+                }[];
+                for (const row of rows) {
+                    splitCents(row.amount, row.installments).forEach((part, index) =>
+                        insert.run(row.id, index, addMonths(row.date, index), part),
+                    );
+                }
             }
-            sqlite.pragma('user_version = 2');
+            sqlite.pragma('user_version = 3');
         })();
     }
     return { sqlite, db: drizzle(sqlite) };

@@ -1,15 +1,17 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { zValidator } from '@hono/zod-validator';
 import { betterAuth } from 'better-auth';
 import { and, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { csrf } from 'hono/csrf';
 import { z } from 'zod';
 
 import { addMonths, splitCents, type Installment, type ScheduleRule } from '../shared/schedule';
 
 import { allocations, charges, payments, type openDatabase } from './db';
+import { MAX_CSV_BYTES, parseImport, type ImportRow } from './import-csv';
 
 type Store = ReturnType<typeof openDatabase>;
 const date = z.iso.date().refine(value => {
@@ -57,6 +59,7 @@ const paymentEditInput = z.object({
     date,
     category: z.string().trim().min(1).max(80),
     amount,
+    label: z.string().trim().max(120).nullable().optional(),
 });
 const paymentInput = paymentEditInput
     .extend({
@@ -72,6 +75,46 @@ const allocationInput = z.object({
         .min(1)
         .max(100),
 });
+const importInput = z.object({
+    kind: z.enum(['charges', 'payments', 'solde']),
+    csv: z.string().max(MAX_CSV_BYTES),
+    commit: z.boolean(),
+    approvedDuplicates: z.array(z.string().max(100)).max(2000),
+});
+
+function importKey(row: ImportRow) {
+    return JSON.stringify(
+        row.kind === 'charge'
+            ? [row.kind, row.date, row.title, row.category, row.amount]
+            : [row.kind, row.date, row.category, row.amount, row.label || null],
+    );
+}
+
+function findDuplicates(store: Store, userId: string, rows: ImportRow[]) {
+    const existing = new Map<string, string[]>();
+    for (const charge of store.db.select().from(charges).where(eq(charges.userId, userId)).all()) {
+        const key = importKey({ ...charge, row: 0, kind: 'charge' });
+        existing.set(key, [...(existing.get(key) ?? []), charge.id]);
+    }
+    for (const payment of store.db.select().from(payments).where(eq(payments.userId, userId)).all()) {
+        const key = importKey({ ...payment, row: 0, kind: 'payment' });
+        existing.set(key, [...(existing.get(key) ?? []), payment.id]);
+    }
+    const seen = new Map<string, number>();
+    const duplicates: { row: number; marker: string }[] = [];
+    for (const row of rows) {
+        const key = importKey(row);
+        const matches = existing.get(key);
+        if (matches?.length) {
+            const digest = createHash('sha256').update(matches.sort().join(',')).digest('hex');
+            duplicates.push({ row: row.row, marker: `${row.row}:existing:${digest}` });
+        }
+        const previous = seen.get(key);
+        if (previous !== undefined) duplicates.push({ row: row.row, marker: `${row.row}:file:${previous}` });
+        else seen.set(key, row.row);
+    }
+    return duplicates;
+}
 
 function canAllocate(store: Store, userId: string, requested: { chargeId: string; amount: number }[]) {
     const totals = new Map<string, number>();
@@ -161,6 +204,13 @@ export function createApp(store: Store, secret: string, origin: string) {
         await next();
     });
     app.use('/api/*', csrf({ origin }));
+    app.use(
+        '/api/import',
+        bodyLimit({
+            maxSize: 6_500_000,
+            onError: c => c.json({ error: 'Requête d’import trop volumineuse.' }, 413),
+        }),
+    );
     app.on(['POST', 'GET'], '/api/auth/*', c => auth.handler(c.req.raw));
     const api = app
         .get('/api/settings', async c => {
@@ -281,6 +331,56 @@ export function createApp(store: Store, secret: string, origin: string) {
                 .run(c.req.param('id'), session.user.id);
             if (!result.changes) return c.json({ error: 'Échéancier introuvable' }, 404);
             return c.json({ success: true });
+        })
+        .post('/api/import', zValidator('json', importInput), async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const { kind, csv, commit, approvedDuplicates } = c.req.valid('json');
+            const parsed = parseImport(kind, csv);
+            if (parsed.errors.length) return c.json({ ...parsed, duplicates: [], imported: false }, 200);
+            initializeSettings(store, session.user.id);
+            try {
+                const result = store.sqlite.transaction(() => {
+                    const duplicates = findDuplicates(store, session.user.id, parsed.rows);
+                    if (!commit || duplicates.some(item => !approvedDuplicates.includes(item.marker))) {
+                        return { ...parsed, duplicates, imported: false };
+                    }
+                    for (const row of parsed.rows) {
+                        if (row.kind === 'charge') {
+                            const { row: _row, kind: _kind, ...data } = row;
+                            const id = randomUUID();
+                            store.db
+                                .insert(charges)
+                                .values({
+                                    ...data,
+                                    id,
+                                    userId: session.user.id,
+                                    installments: 1,
+                                })
+                                .run();
+                            saveSchedule(store, id, [{ date: data.date, amount: data.amount }]);
+                            const exists = store.sqlite
+                                .prepare('SELECT 1 FROM categories WHERE user_id = ? AND name = ? COLLATE NOCASE')
+                                .get(session.user.id, data.category);
+                            if (!exists)
+                                store.sqlite
+                                    .prepare('INSERT INTO categories VALUES (?, ?, ?, NULL)')
+                                    .run(randomUUID(), session.user.id, data.category);
+                        } else {
+                            const { row: _row, kind: _kind, ...data } = row;
+                            store.db
+                                .insert(payments)
+                                .values({ ...data, id: randomUUID(), userId: session.user.id })
+                                .run();
+                        }
+                    }
+                    return { ...parsed, duplicates, imported: true };
+                })();
+                return c.json(result);
+            } catch {
+                console.error('Échec de la transaction d’import CSV.');
+                return c.json({ error: 'Import impossible. Aucune ligne n’a été enregistrée.' }, 500);
+            }
         })
         .get('/api/charges', async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });

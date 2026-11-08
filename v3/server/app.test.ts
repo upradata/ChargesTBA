@@ -22,11 +22,11 @@ describe('API locale', () => {
                 .prepare('INSERT INTO charges VALUES (?, ?, ?, ?, ?, ?, ?)')
                 .run('c', 'u', 'Charge', 'Ancienne catégorie', '2024-01-31', 1000, 3);
             old.sqlite
-                .prepare('INSERT INTO payments VALUES (?, ?, ?, ?, ?)')
+                .prepare('INSERT INTO payments (id, user_id, date, category, amount) VALUES (?, ?, ?, ?, ?)')
                 .run('p', 'u', '2024-02-01', 'Virement', 200);
             old.sqlite.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?)').run('a', 'p', 'c', 200);
             old.sqlite.exec(
-                'DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; PRAGMA user_version = 1',
+                'DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; ALTER TABLE payments DROP COLUMN label; PRAGMA user_version = 1',
             );
             old.sqlite.close();
             const migrated = openDatabase(path);
@@ -42,10 +42,54 @@ describe('API locale', () => {
             expect(migrated.sqlite.prepare('SELECT amount FROM allocations WHERE id = ?').get('a')).toEqual({
                 amount: 200,
             });
-            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(2);
+            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(3);
             migrated.sqlite.close();
         } finally {
             rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
+    it('migre les deux variantes de base version 2 sans perdre de données', () => {
+        for (const variant of ['imports', 'schedules'] as const) {
+            const directory = mkdtempSync(join(tmpdir(), 'charges-v2-'));
+            const path = join(directory, 'db.sqlite');
+            try {
+                const old = openDatabase(path);
+                old.sqlite.exec(`
+                    INSERT INTO "user" (id, name, email, createdAt, updatedAt) VALUES ('u', 'Test', 'u@example.com', 0, 0);
+                    INSERT INTO charges VALUES ('c', 'u', 'Charge', 'Test', '2024-01-31', 1000, 2);
+                    INSERT INTO payments (id, user_id, date, category, amount, label)
+                        VALUES ('p', 'u', '2024-02-01', 'Virement', 200, 'Libellé');
+                `);
+                if (variant === 'imports') {
+                    old.sqlite.exec(
+                        'DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized;',
+                    );
+                } else {
+                    old.sqlite.exec(`INSERT INTO charge_installments VALUES ('c', 0, '2024-04-15', 1000);
+                        ALTER TABLE payments DROP COLUMN label;`);
+                }
+                old.sqlite.pragma('user_version = 2');
+                old.sqlite.close();
+                const migrated = openDatabase(path);
+                expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(3);
+                expect(migrated.sqlite.prepare('SELECT label FROM payments').get()).toEqual({
+                    label: variant === 'imports' ? 'Libellé' : null,
+                });
+                expect(
+                    migrated.sqlite.prepare('SELECT date, amount FROM charge_installments ORDER BY position').all(),
+                ).toEqual(
+                    variant === 'imports'
+                        ? [
+                              { date: '2024-01-31', amount: 500 },
+                              { date: '2024-02-29', amount: 500 },
+                          ]
+                        : [{ date: '2024-04-15', amount: 1000 }],
+                );
+                migrated.sqlite.close();
+            } finally {
+                rmSync(directory, { recursive: true, force: true });
+            }
         }
     });
 

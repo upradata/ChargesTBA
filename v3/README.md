@@ -2,6 +2,9 @@
 
 Early local-first prototype. This is not yet a replacement for v1 or v2.
 
+See the [product plan](./PROJECT-PLAN.md) for recorded decisions, release
+milestones, and open questions.
+
 ## Run locally
 
 Use Node.js `^22.18.0`, `^24.11.0` or `>=26.0.0` and pnpm from the workspace
@@ -39,10 +42,64 @@ production financial data without assessing its security and backup needs.
 - Allocate payments across unpaid charges and apply previously unallocated
   credit later. Amounts already allocated cannot currently be reassigned.
 - Dashboard with overdue amounts, balance graph and chronological movements.
+- CSV import for charges, payments and mixed account statements, available
+  after signing in.
 
 Charge-first payment, modifying existing allocations, tags, demo mode,
 email/calendar integrations and bank or syndic connections remain to be built.
 The dashboard's overdue figure is informational and does not send reminders.
+
+## CSV import
+
+Select **Importer** after signing in, select the file type and a UTF-8 CSV,
+then inspect the preview before confirming. Data is added to the signed-in
+account only. The file is not retained separately; resulting records remain in
+the local database. No CSV contents are written to the import log.
+
+The first row contains column names, in any order. Names are case-insensitive;
+French aliases `libellé`, `catégorie`, `montant`, `crédit` and `débit` are
+accepted in place of `label`, `type`, `amount`, `credit` and `debit`.
+Use commas or semicolons as separators, and quote fields containing the
+separator, quotes (doubled as `""`), or line breaks. Dates must be `YYYY-MM-DD`
+or `DD/MM/YYYY`. Amounts are positive euros with up to two decimal places,
+using a comma or a point; thousands separators and currency symbols are not
+accepted. Quote decimal commas in comma-separated files. Files are limited to
+1,000 data rows and 1,000,000 bytes.
+
+Charge example:
+
+```csv
+date;label;type;amount
+31/01/2026;Premier trimestre;Appel de fonds;125,50
+```
+
+Each charge has one installment. Payment example:
+
+```csv
+date;type;amount
+01/02/2026;Virement;100,00
+```
+
+An optional `label` column is also accepted for payment files. Statement
+(`solde`) example:
+
+```csv
+date;label;type;crédit;débit
+31/01/2026;Premier trimestre;Appel de fonds;;125,50
+01/02/2026;Règlement;Virement;100,00;
+```
+
+Exactly one of credit or debit must be positive in each statement row. Debits
+create charges and credits create payments. The label and type are retained.
+Payments are not automatically allocated; use **Utiliser le crédit** to
+allocate them later.
+
+The preview identifies invalid rows and possible exact duplicates in the file
+or the current account. A charge matches on date, label, type and amount; a
+payment matches on date, type, amount and optional label. Invalid rows block
+the entire import. Duplicates are not skipped: confirm explicitly to import
+them. Duplicates are checked again at confirmation, and changed matches
+require another review. The import is atomic: a failed import saves no rows.
 
 ## Checks
 

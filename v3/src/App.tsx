@@ -29,8 +29,9 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 
 import type { AppType } from '../server/app';
-import { addMonths, makeSchedule, remainingInstallments } from '../shared/schedule';
+import { addMonths, displayDate, makeSchedule, remainingInstallments } from '../shared/schedule';
 
+import { ImportView } from './ImportView';
 import { SettingsView } from './SettingsView';
 
 const auth = createAuthClient({ baseURL: window.location.origin });
@@ -38,10 +39,6 @@ const api = hc<AppType>('/');
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (cents: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cents / 100);
-const displayDate = (date: string) => {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-    return match ? `${match[3]}/${match[2]}/${match[1]}` : date;
-};
 function FrenchDateInput({
     label,
     value,
@@ -561,6 +558,7 @@ function PaymentsView({ charges, payments }: { charges: Charge[]; payments: Paym
                             <Table.Tr>
                                 <Table.Th>Date</Table.Th>
                                 <Table.Th>Moyen</Table.Th>
+                                <Table.Th>Libellé</Table.Th>
                                 <Table.Th>Montant</Table.Th>
                                 <Table.Th>Non affecté</Table.Th>
                                 <Table.Th>Action</Table.Th>
@@ -571,6 +569,7 @@ function PaymentsView({ charges, payments }: { charges: Charge[]; payments: Paym
                                 <Table.Tr key={p.id}>
                                     <Table.Td>{displayDate(p.date)}</Table.Td>
                                     <Table.Td>{p.category}</Table.Td>
+                                    <Table.Td>{p.label || '—'}</Table.Td>
                                     <Table.Td>{money(p.amount)}</Table.Td>
                                     <Table.Td>{money(p.amount - p.allocated)}</Table.Td>
                                     <Table.Td>
@@ -599,7 +598,12 @@ function PaymentEdit({ payment, onDone }: { payment: Payment; onDone: () => void
     const client = useQueryClient();
     const [error, setError] = useState('');
     const form = useForm({
-        initialValues: { date: payment.date, category: payment.category, amount: (payment.amount / 100).toFixed(2) },
+        initialValues: {
+            date: payment.date,
+            category: payment.category,
+            label: payment.label ?? '',
+            amount: (payment.amount / 100).toFixed(2),
+        },
     });
     const mutation = useMutation({
         mutationFn: async (values: typeof form.values) =>
@@ -633,6 +637,7 @@ function PaymentEdit({ payment, onDone }: { payment: Payment; onDone: () => void
                         onChange={value => form.setFieldValue('date', value)}
                     />
                     <TextInput label="Moyen de paiement" required {...form.getInputProps('category')} />
+                    <TextInput label="Libellé (facultatif)" maxLength={120} {...form.getInputProps('label')} />
                     <TextInput
                         label="Montant en euros"
                         inputMode="decimal"
@@ -725,7 +730,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
     const credit = payments.reduce((sum, p) => sum + p.amount - p.allocated, 0);
     const movements = [
         ...charges.map(c => ({ id: c.id, date: c.date, label: c.title, amount: -c.amount })),
-        ...payments.map(p => ({ id: p.id, date: p.date, label: p.category, amount: p.amount })),
+        ...payments.map(p => ({ id: p.id, date: p.date, label: p.label || p.category, amount: p.amount })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     let running = 0;
     const rows = movements.map(m => ({ ...m, balance: (running += m.amount) }));
@@ -848,6 +853,7 @@ export function App() {
         ['/payments', 'Paiements'],
         ['/ledger', 'Mouvements'],
         ['/settings', 'Paramètres'],
+        ['/import', 'Importer'],
     ];
     return (
         <AppShell
@@ -908,6 +914,7 @@ export function App() {
                                 path="/ledger"
                                 element={<Overview charges={charges.data} payments={payments.data} ledger />}
                             />
+                            <Route path="/import" element={<ImportView />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     )}
