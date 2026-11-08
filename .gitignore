@@ -8,3 +8,4 @@ dist/
 # Private bank statements
 *.csv
 v2/.clasp.json
+v3/.data/

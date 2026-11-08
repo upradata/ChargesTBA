@@ -1,11 +1,12 @@
 # ChargesTBA
 
-pnpm workspace for co-ownership charges and payments tracking in Google Sheets.
+pnpm workspace for co-ownership charges and payments tracking.
 
 | Package    | Description                                                   |
 | ---------- | ------------------------------------------------------------- |
 | [v1](./v1) | Apps Script `onEdit` automation (current production)          |
 | [v2](./v2) | Formula-driven rewrite (payments, charges, allocations) — WIP |
+| [v3](./v3) | Local web application — early development                     |
 
 ## Commands (from the root)
 
