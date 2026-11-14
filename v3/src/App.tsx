@@ -1,44 +1,48 @@
-import { LineChart } from '@mantine/charts';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createAuthClient } from 'better-auth/react';
+import { hc } from 'hono/client';
+import { CreditCard, Home, List, Menu, Moon, Receipt, Settings, Sun, Upload, X } from 'lucide-react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
+import {
+    CartesianGrid,
+    Line,
+    LineChart as RechartsLineChart,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from 'recharts';
+
+import type { AppType } from '../server/app';
+import { addMonths, displayDate, makeSchedule, remainingInstallments } from '../shared/schedule';
+
 import {
     Alert,
-    Anchor,
-    AppShell,
     Autocomplete,
     Badge,
-    Burger,
     Button,
     Card,
     Group,
-    NavLink,
-    PasswordInput,
     Progress,
+    PasswordInput,
     Select,
     Stack,
     Table,
     Text,
     TextInput,
     Title,
-    useMantineColorScheme,
-} from '@mantine/core';
-import { useForm } from '@mantine/form';
-import { useDisclosure } from '@mantine/hooks';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createAuthClient } from 'better-auth/react';
-import { hc } from 'hono/client';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
-
-import type { AppType } from '../server/app';
-import { addMonths, displayDate, makeSchedule, remainingInstallments } from '../shared/schedule';
-
-import { ImportView } from './ImportView';
-import { SettingsView } from './SettingsView';
+} from './components/ui/primitives';
+import { useFormState } from './lib/use-form-state';
 
 const auth = createAuthClient({ baseURL: window.location.origin });
 const api = hc<AppType>('/');
 const today = () => new Date().toLocaleDateString('en-CA');
 const money = (cents: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cents / 100);
+const ImportView = lazy(() => import('./ImportView').then(module => ({ default: module.ImportView })));
+const SettingsView = lazy(() => import('./SettingsView').then(module => ({ default: module.SettingsView })));
+
 function FrenchDateInput({
     label,
     value,
@@ -123,7 +127,7 @@ function Login() {
     const [signup, setSignup] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-    const form = useForm({ initialValues: { name: '', email: '', password: '' } });
+    const form = useFormState({ name: '', email: '', password: '' });
     async function submit(values: typeof form.values) {
         setError('');
         setLoading(true);
@@ -139,8 +143,8 @@ function Login() {
         }
     }
     return (
-        <main className="login">
-            <Card withBorder radius="lg" p="xl">
+        <main className="grid min-h-screen place-items-center p-4">
+            <Card withBorder radius="lg" p="xl" className="w-full max-w-md">
                 <Stack>
                     <Title order={1}>ChargesTBA</Title>
                     <Text c="dimmed">Suivez vos charges et vos paiements en toute simplicité.</Text>
@@ -174,15 +178,15 @@ function Login() {
                             </Button>
                         </Stack>
                     </form>
-                    <Anchor
-                        component="button"
-                        type="button"
+                    <Button
+                        variant="link"
+                        className="h-auto px-0"
                         onClick={() => {
                             setSignup(!signup);
                             setError('');
                         }}>
                         {signup ? 'J’ai déjà un compte' : 'Créer un compte'}
-                    </Anchor>
+                    </Button>
                 </Stack>
             </Card>
         </main>
@@ -192,17 +196,16 @@ function Login() {
 function ChargeForm({ onDone, charge, settings }: { onDone: () => void; charge?: Charge; settings: Settings }) {
     const client = useQueryClient();
     const [error, setError] = useState('');
-    const form = useForm({
-        initialValues: charge
+    const form = useFormState(
+        charge
             ? {
                   title: charge.title,
                   category: charge.category,
                   date: charge.date,
                   amount: (charge.amount / 100).toFixed(2),
-                  installments: charge.installments,
               }
-            : { title: '', category: '', date: today(), amount: '', installments: 1 },
-    });
+            : { title: '', category: '', date: today(), amount: '' },
+    );
     const [mode, setMode] = useState(charge ? 'custom' : 'once');
     const [schedule, setSchedule] = useState(
         charge?.schedule.map(item => ({ date: item.date, amount: (item.amount / 100).toFixed(2) })) ?? [
@@ -443,7 +446,7 @@ function PaymentForm({ charges, onDone }: { charges: Charge[]; onDone: () => voi
     const client = useQueryClient();
     const [error, setError] = useState('');
     const [amounts, setAmounts] = useState<Record<string, string>>({});
-    const form = useForm({ initialValues: { date: today(), category: 'Virement', amount: '' } });
+    const form = useFormState({ date: today(), category: 'Virement', amount: '' });
     const mutation = useMutation({
         mutationFn: async (values: typeof form.values) =>
             response(
@@ -597,13 +600,11 @@ function PaymentsView({ charges, payments }: { charges: Charge[]; payments: Paym
 function PaymentEdit({ payment, onDone }: { payment: Payment; onDone: () => void }) {
     const client = useQueryClient();
     const [error, setError] = useState('');
-    const form = useForm({
-        initialValues: {
-            date: payment.date,
-            category: payment.category,
-            label: payment.label ?? '',
-            amount: (payment.amount / 100).toFixed(2),
-        },
+    const form = useFormState({
+        date: payment.date,
+        category: payment.category,
+        label: payment.label ?? '',
+        amount: (payment.amount / 100).toFixed(2),
     });
     const mutation = useMutation({
         mutationFn: async (values: typeof form.values) =>
@@ -777,7 +778,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
         <Stack>
             <Title order={1}>Tableau de bord</Title>
             <Text c="dimmed">Une vue claire de vos charges et de vos paiements.</Text>
-            <div className="stats">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                     ['Solde', paid - total],
                     ['Charges restantes', charges.reduce((sum, c) => sum + c.amount - c.paid, 0)],
@@ -797,13 +798,32 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                     <Title order={2} size="h3" mb="lg">
                         Évolution du solde
                     </Title>
-                    <LineChart
-                        h={220}
-                        data={rows.map(row => ({ date: displayDate(row.date), solde: row.balance / 100 }))}
-                        dataKey="date"
-                        series={[{ name: 'solde', color: 'teal.6', label: 'Solde (€)' }]}
-                        curveType="linear"
-                    />
+                    <div role="img" aria-label="Graphique de l’évolution du solde en euros">
+                        <ResponsiveContainer width="100%" height={240}>
+                            <RechartsLineChart
+                                accessibilityLayer
+                                data={rows.map(row => ({ date: displayDate(row.date), solde: row.balance / 100 }))}
+                                margin={{ top: 8, right: 12, bottom: 0, left: 8 }}>
+                                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                                <YAxis
+                                    width={88}
+                                    tickLine={false}
+                                    axisLine={false}
+                                    tickFormatter={value => money(Number(value) * 100)}
+                                />
+                                <Tooltip formatter={value => [money(Number(value) * 100), 'Solde']} />
+                                <Line
+                                    dataKey="solde"
+                                    type="linear"
+                                    stroke="var(--primary)"
+                                    strokeWidth={2}
+                                    dot={false}
+                                    activeDot={{ r: 4 }}
+                                />
+                            </RechartsLineChart>
+                        </ResponsiveContainer>
+                    </div>
                 </Card>
             )}
             <Text size="sm" c="dimmed">
@@ -815,10 +835,24 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
 
 export function App() {
     const session = auth.useSession();
-    const { colorScheme, toggleColorScheme } = useMantineColorScheme();
     const location = useLocation();
-    const [opened, { toggle, close }] = useDisclosure(false);
+    const [colorScheme, setColorScheme] = useState<'light' | 'dark'>(() =>
+        document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+    );
+    const [opened, setOpened] = useState(false);
     const client = useQueryClient();
+    useEffect(() => {
+        document.documentElement.classList.toggle('dark', colorScheme === 'dark');
+        window.localStorage.setItem('charges-tba-color-scheme', colorScheme);
+    }, [colorScheme]);
+    useEffect(() => {
+        if (!opened) return;
+        function closeOnEscape(event: KeyboardEvent) {
+            if (event.key === 'Escape') setOpened(false);
+        }
+        window.addEventListener('keydown', closeOnEscape);
+        return () => window.removeEventListener('keydown', closeOnEscape);
+    }, [opened]);
     const charges = useQuery({
         queryKey: ['charges', session.data?.user.id],
         queryFn: getCharges,
@@ -848,50 +882,70 @@ export function App() {
         return <Alert color="red">Impossible de vérifier la session. Vérifiez que le serveur fonctionne.</Alert>;
     if (!session.data) return <Login />;
     const items = [
-        ['/', 'Tableau de bord'],
-        ['/charges', 'Charges'],
-        ['/payments', 'Paiements'],
-        ['/ledger', 'Mouvements'],
-        ['/settings', 'Paramètres'],
-        ['/import', 'Importer'],
+        { path: '/', label: 'Tableau de bord', icon: Home },
+        { path: '/charges', label: 'Charges', icon: Receipt },
+        { path: '/payments', label: 'Paiements', icon: CreditCard },
+        { path: '/ledger', label: 'Mouvements', icon: List },
+        { path: '/settings', label: 'Paramètres', icon: Settings },
+        { path: '/import', label: 'Importer', icon: Upload },
     ];
     return (
-        <AppShell
-            header={{ height: 64 }}
-            navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !opened } }}
-            padding="xl">
-            <AppShell.Header>
-                <Group justify="space-between" h="100%" px="lg">
-                    <Group>
-                        <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" aria-label="Menu" />
-                        <Text fw={700}>ChargesTBA</Text>
-                    </Group>
-                    <Group>
-                        <Button variant="subtle" onClick={() => toggleColorScheme()}>
-                            {colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+        <div className="bg-background min-h-screen md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
+            <header className="bg-card/95 sticky top-0 z-40 flex min-h-16 items-center justify-between border-b px-4 backdrop-blur md:col-span-2 md:px-6">
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="subtle"
+                        size="icon"
+                        className="md:hidden"
+                        aria-label={opened ? 'Fermer le menu' : 'Ouvrir le menu'}
+                        aria-expanded={opened}
+                        onClick={() => setOpened(value => !value)}>
+                        {opened ? <X /> : <Menu />}
+                    </Button>
+                    <span className="font-semibold tracking-tight">ChargesTBA</span>
+                </div>
+                <div className="flex items-center gap-1">
+                    <Button
+                        variant="subtle"
+                        size="icon"
+                        aria-label={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                        title={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                        onClick={() => setColorScheme(value => (value === 'dark' ? 'light' : 'dark'))}>
+                        {colorScheme === 'dark' ? <Sun /> : <Moon />}
+                    </Button>
+                    <form onSubmit={signOut}>
+                        <Button type="submit" variant="subtle">
+                            Déconnexion
                         </Button>
-                        <form onSubmit={signOut}>
-                            <Button type="submit" variant="subtle">
-                                Déconnexion
-                            </Button>
-                        </form>
-                    </Group>
-                </Group>
-            </AppShell.Header>
-            <AppShell.Navbar p="md">
-                {items.map(([path, label]) => (
-                    <NavLink
-                        key={path}
-                        component={Link}
-                        to={path}
-                        label={label}
-                        active={location.pathname === path}
-                        onClick={close}
-                    />
-                ))}
-            </AppShell.Navbar>
-            <AppShell.Main>
-                <div className="content">
+                    </form>
+                </div>
+            </header>
+            {opened && (
+                <button
+                    type="button"
+                    aria-label="Fermer le menu"
+                    className="fixed inset-0 z-30 bg-black/40 md:hidden"
+                    onClick={() => setOpened(false)}
+                />
+            )}
+            <aside
+                className={`${opened ? 'block' : 'hidden'} bg-card fixed top-16 left-0 z-40 h-[calc(100dvh-4rem)] w-60 overflow-y-auto border-r p-3 md:sticky md:top-16 md:row-start-2 md:block md:h-[calc(100vh-4rem)]`}>
+                <nav aria-label="Navigation principale" className="grid gap-1">
+                    {items.map(({ path, label, icon: Icon }) => (
+                        <Link
+                            key={path}
+                            to={path}
+                            onClick={() => setOpened(false)}
+                            aria-current={location.pathname === path ? 'page' : undefined}
+                            className={`hover:bg-accent hover:text-accent-foreground flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${location.pathname === path ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}`}>
+                            <Icon className="size-4" aria-hidden="true" />
+                            {label}
+                        </Link>
+                    ))}
+                </nav>
+            </aside>
+            <main className="min-w-0 p-4 sm:p-6 md:col-start-2 md:row-start-2 lg:p-8">
+                <div className="mx-auto w-full max-w-6xl">
                     {charges.isError || payments.isError || settings.isError ? (
                         <Alert color="red" role="alert">
                             Impossible de charger les données.
@@ -899,27 +953,32 @@ export function App() {
                     ) : !charges.data || !payments.data || !settings.data ? (
                         <Text>Chargement…</Text>
                     ) : (
-                        <Routes>
-                            <Route path="/" element={<Overview charges={charges.data} payments={payments.data} />} />
-                            <Route
-                                path="/charges"
-                                element={<ChargesView charges={charges.data} settings={settings.data} />}
-                            />
-                            <Route path="/settings" element={<SettingsView settings={settings.data} />} />
-                            <Route
-                                path="/payments"
-                                element={<PaymentsView charges={charges.data} payments={payments.data} />}
-                            />
-                            <Route
-                                path="/ledger"
-                                element={<Overview charges={charges.data} payments={payments.data} ledger />}
-                            />
-                            <Route path="/import" element={<ImportView />} />
-                            <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
+                        <Suspense fallback={<Text>Chargement…</Text>}>
+                            <Routes>
+                                <Route
+                                    path="/"
+                                    element={<Overview charges={charges.data} payments={payments.data} />}
+                                />
+                                <Route
+                                    path="/charges"
+                                    element={<ChargesView charges={charges.data} settings={settings.data} />}
+                                />
+                                <Route path="/settings" element={<SettingsView settings={settings.data} />} />
+                                <Route
+                                    path="/payments"
+                                    element={<PaymentsView charges={charges.data} payments={payments.data} />}
+                                />
+                                <Route
+                                    path="/ledger"
+                                    element={<Overview charges={charges.data} payments={payments.data} ledger />}
+                                />
+                                <Route path="/import" element={<ImportView />} />
+                                <Route path="*" element={<Navigate to="/" replace />} />
+                            </Routes>
+                        </Suspense>
                     )}
                 </div>
-            </AppShell.Main>
-        </AppShell>
+            </main>
+        </div>
     );
 }

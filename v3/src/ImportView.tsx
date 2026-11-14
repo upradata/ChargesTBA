@@ -1,4 +1,3 @@
-import { Alert, Button, FileInput, Group, Select, Stack, Table, Text, Title } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { hc } from 'hono/client';
 import { useState } from 'react';
@@ -6,6 +5,8 @@ import { useState } from 'react';
 import type { AppType } from '../server/app';
 import { MAX_CSV_BYTES, type ImportError, type ImportKind, type ImportRow } from '../server/import-csv';
 import { displayDate } from '../shared/schedule';
+
+import { Alert, Button, FileInput, Group, Select, Stack, Table, Text, Title } from './components/ui/primitives';
 
 type Preview = {
     rows: ImportRow[];

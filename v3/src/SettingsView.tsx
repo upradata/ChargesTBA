@@ -1,4 +1,3 @@
-import { Alert, Button, Card, Group, NumberInput, Select, Stack, Text, TextInput, Title } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { hc } from 'hono/client';
 import { useState, type FormEvent } from 'react';
@@ -7,6 +6,18 @@ import type { AppType } from '../server/app';
 import type { ScheduleRule } from '../shared/schedule';
 
 import type { Settings } from './App';
+import {
+    Alert,
+    Button,
+    Card,
+    Group,
+    NumberInput,
+    Select,
+    Stack,
+    Text,
+    TextInput,
+    Title,
+} from './components/ui/primitives';
 
 const api = hc<AppType>('/');
 async function check(res: Response) {
