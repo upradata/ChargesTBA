@@ -49,6 +49,18 @@ Charge-first payment, modifying existing allocations, tags, demo mode,
 email/calendar integrations and bank or syndic connections remain to be built.
 The dashboard's overdue figure is informational and does not send reminders.
 
+## Frontend architecture
+
+The client is a React and TypeScript single-page app built with Vite Plus. It
+uses Tailwind CSS v4 and shadcn/ui primitives for its interface, React Router
+for client-side navigation, TanStack Query for server state, Zod for runtime
+validation, and Recharts for the balance graph. Shared UI components live in
+`src/components/ui`; feature-specific workflows remain in the client source.
+
+The API remains a separate Hono service with Better Auth and SQLite/Drizzle.
+AI capabilities are intentionally deferred: Vercel AI SDK, AI Elements and
+streaming transports are not dependencies until an AI feature is implemented.
+
 ## CSV import
 
 Select **Importer** after signing in, select the file type and a UTF-8 CSV,

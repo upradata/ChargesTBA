@@ -32,19 +32,19 @@ views.
 
 ## Decisions made
 
-| Area                          | Decision                                                                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend                      | React and TypeScript                                                                                                                                    |
-| Frontend toolchain            | Project-local Vite+ (`vp`) for Vite, Oxc and tests; pnpm remains the workspace package manager. Do not require a global Vite+ installation.             |
-| Backend                       | Hono on Node.js with a typed HTTP API and conventional TypeScript; do not adopt Effect as the application-wide programming model for now.               |
-| Persistence                   | SQLite with Drizzle ORM for the local-first starting point. Moving to PostgreSQL later requires an explicit migration.                                  |
-| UI                            | Mantine components and forms, with a polished, spacious dashboard inspired by ChatGPT's visual simplicity. This is not a conversational/chat interface. |
-| Supporting frontend libraries | React Router for navigation, TanStack Query for server state, Zod for runtime validation, and Mantine Charts/Recharts for visualizations.               |
-| Authentication                | Local email/password accounts using Better Auth; isolate each account's data. A demo account must be synthetic and explicitly enabled by the user.      |
-| Initial operation             | Local-first and loopback-bound. Do not expose the development server to the Internet or imply that local authentication is production hosting.          |
-| Currency and amounts          | Euro-first UX; persist money as integer cents and avoid floating-point accounting.                                                                      |
-| Language and dates            | French-first interface. Keep date entry and display unambiguous and distinguish a syndic due date from a user's preferred payment date.                 |
-| Data-entry UX                 | Users can correct their own records. Defaults make entry faster but can be overridden on a charge and later where accounting remains consistent.        |
+| Area                          | Decision                                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend                      | React and TypeScript                                                                                                                               |
+| Frontend toolchain            | Project-local Vite+ (`vp`) for Vite, Oxc and tests; pnpm remains the workspace package manager. Do not require a global Vite+ installation.        |
+| Backend                       | Hono on Node.js with a typed HTTP API and conventional TypeScript; do not adopt Effect as the application-wide programming model for now.          |
+| Persistence                   | SQLite with Drizzle ORM for the local-first starting point. Moving to PostgreSQL later requires an explicit migration.                             |
+| UI                            | Tailwind CSS v4 and shadcn/ui primitives, with a polished, spacious dashboard. This is not a conversational/chat interface.                        |
+| Supporting frontend libraries | React Router for navigation, TanStack Query for server state, Zod for runtime validation, and Recharts for visualizations.                         |
+| Authentication                | Local email/password accounts using Better Auth; isolate each account's data. A demo account must be synthetic and explicitly enabled by the user. |
+| Initial operation             | Local-first and loopback-bound. Do not expose the development server to the Internet or imply that local authentication is production hosting.     |
+| Currency and amounts          | Euro-first UX; persist money as integer cents and avoid floating-point accounting.                                                                 |
+| Language and dates            | French-first interface. Keep date entry and display unambiguous and distinguish a syndic due date from a user's preferred payment date.            |
+| Data-entry UX                 | Users can correct their own records. Defaults make entry faster but can be overridden on a charge and later where accounting remains consistent.   |
 
 ### Product constraints
 
