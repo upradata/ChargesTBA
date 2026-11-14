@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "skills": {
+    "properui": {
+      "source": "properui/properui",
+      "sourceType": "github",
+      "skillPath": "skills/properui/SKILL.md",
+      "computedHash": "91acd9ed9d9eca2ae8d855038e06a4b27aa5c1e14c2942847acd750348903a32"
+    }
+  }
+}

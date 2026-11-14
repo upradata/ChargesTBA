@@ -1,0 +1,15 @@
+{
+    "mcpServers": {
+        "shadcn": {
+            "type": "stdio",
+            "command": "pnpx",
+            "args": ["shadcn@latest", "mcp"],
+            "tools": ["*"]
+        },
+        "chrome-devtools": {
+            "type": "stdio",
+            "command": "pnpx",
+            "args": ["-y", "chrome-devtools-mcp@latest"]
+        }
+    }
+}
