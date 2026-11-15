@@ -1,3 +1,4 @@
+import { Slottable } from '@radix-ui/react-slot';
 import {
     useEffect,
     useId,
@@ -205,7 +206,7 @@ export function Button({
             {loading && (
                 <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" />
             )}
-            {children}
+            <Slottable>{children}</Slottable>
         </ShadcnButton>
     );
 }

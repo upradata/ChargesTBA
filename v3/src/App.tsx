@@ -1,7 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createAuthClient } from 'better-auth/react';
 import { hc } from 'hono/client';
-import { CreditCard, Home, List, Menu, Moon, Receipt, Settings, Sun, Upload, X } from 'lucide-react';
+import {
+    Building2,
+    CalendarClock,
+    CalendarDays,
+    CircleDollarSign,
+    Clock3,
+    CreditCard,
+    Home,
+    List,
+    LogOut,
+    Menu,
+    Moon,
+    Plus,
+    Receipt,
+    Settings,
+    Sun,
+    Upload,
+    Wallet,
+    X,
+    type LucideIcon,
+} from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import {
@@ -17,6 +37,7 @@ import {
 import type { AppType } from '../server/app';
 import { addMonths, displayDate, makeSchedule, remainingInstallments } from '../shared/schedule';
 
+import { PageHeading } from './components/PageHeading';
 import {
     Alert,
     Autocomplete,
@@ -143,52 +164,115 @@ function Login() {
         }
     }
     return (
-        <main className="grid min-h-screen place-items-center p-4">
-            <Card withBorder radius="lg" p="xl" className="w-full max-w-md">
-                <Stack>
-                    <Title order={1}>ChargesTBA</Title>
-                    <Text c="dimmed">Suivez vos charges et vos paiements en toute simplicité.</Text>
-                    <Title order={2} size="h3">
-                        {signup ? 'Créer un compte' : 'Connexion'}
-                    </Title>
-                    {error && (
-                        <Alert color="red" role="alert">
-                            {error}
-                        </Alert>
-                    )}
-                    <form onSubmit={form.onSubmit(submit)}>
-                        <Stack>
-                            {signup && <TextInput label="Nom" required {...form.getInputProps('name')} />}
-                            <TextInput
-                                label="Adresse e-mail"
-                                type="email"
-                                required
-                                autoComplete="email"
-                                {...form.getInputProps('email')}
-                            />
-                            <PasswordInput
-                                label="Mot de passe"
-                                required
-                                minLength={8}
-                                autoComplete={signup ? 'new-password' : 'current-password'}
-                                {...form.getInputProps('password')}
-                            />
-                            <Button type="submit" loading={loading}>
-                                {signup ? 'Créer mon compte' : 'Se connecter'}
+        <main className="bg-background grid min-h-screen place-items-center px-4 py-8 sm:px-6">
+            <div className="bg-card grid w-full max-w-5xl overflow-hidden rounded-2xl border shadow-sm lg:grid-cols-[1fr_0.9fr]">
+                <section className="bg-muted/50 hidden flex-col justify-between border-e p-10 lg:flex">
+                    <div className="flex items-center gap-3">
+                        <span className="bg-primary text-primary-foreground grid size-11 place-items-center rounded-xl">
+                            <Building2 className="size-5" aria-hidden="true" />
+                        </span>
+                        <div>
+                            <p className="font-semibold tracking-tight">ChargesTBA</p>
+                            <p className="text-muted-foreground text-xs">Suivi de copropriété</p>
+                        </div>
+                    </div>
+                    <div className="max-w-md space-y-5">
+                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">
+                            Vos comptes, en clair
+                        </p>
+                        <h1 className="text-4xl leading-tight font-semibold tracking-tight">
+                            Une vue simple sur les charges et les paiements.
+                        </h1>
+                        <p className="text-muted-foreground leading-7">
+                            Retrouvez les échéances, les règlements et le solde de votre copropriété au même endroit.
+                        </p>
+                        <div className="grid gap-3 pt-2 sm:grid-cols-3">
+                            {[
+                                ['01', 'Charges'],
+                                ['02', 'Paiements'],
+                                ['03', 'Solde'],
+                            ].map(([number, label]) => (
+                                <div key={label} className="border-t pt-3">
+                                    <p className="text-muted-foreground font-mono text-xs">{number}</p>
+                                    <p className="mt-1 text-sm font-medium">{label}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <p className="text-muted-foreground text-xs">Application locale · Prototype</p>
+                </section>
+                <section className="flex items-center justify-center p-6 sm:p-10">
+                    <div className="w-full max-w-sm">
+                        <div className="mb-8 flex items-center gap-3 lg:hidden">
+                            <span className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-xl">
+                                <Building2 className="size-5" aria-hidden="true" />
+                            </span>
+                            <div>
+                                <p className="font-semibold tracking-tight">ChargesTBA</p>
+                                <p className="text-muted-foreground text-xs">Suivi de copropriété</p>
+                            </div>
+                        </div>
+                        <div className="mb-6 space-y-2">
+                            <p className="text-primary text-xs font-semibold tracking-wider uppercase">
+                                Espace personnel
+                            </p>
+                            <h2 className="text-2xl font-semibold tracking-tight">
+                                {signup ? 'Créer un compte' : 'Bon retour'}
+                            </h2>
+                            <p className="text-muted-foreground text-sm">
+                                {signup
+                                    ? 'Commencez à organiser votre suivi.'
+                                    : 'Connectez-vous pour retrouver votre suivi.'}
+                            </p>
+                        </div>
+                        {error && (
+                            <Alert color="red" role="alert" className="mb-5">
+                                {error}
+                            </Alert>
+                        )}
+                        <form onSubmit={form.onSubmit(submit)}>
+                            <Stack>
+                                {signup && (
+                                    <TextInput
+                                        label="Nom"
+                                        required
+                                        autoComplete="name"
+                                        {...form.getInputProps('name')}
+                                    />
+                                )}
+                                <TextInput
+                                    label="Adresse e-mail"
+                                    type="email"
+                                    required
+                                    autoComplete="email"
+                                    {...form.getInputProps('email')}
+                                />
+                                <PasswordInput
+                                    label="Mot de passe"
+                                    required
+                                    minLength={8}
+                                    autoComplete={signup ? 'new-password' : 'current-password'}
+                                    {...form.getInputProps('password')}
+                                />
+                                <Button type="submit" loading={loading} className="mt-2 w-full">
+                                    {signup ? 'Créer mon compte' : 'Se connecter'}
+                                </Button>
+                            </Stack>
+                        </form>
+                        <div className="mt-5 border-t pt-4 text-center">
+                            <Button
+                                variant="link"
+                                className="h-auto px-0"
+                                onClick={() => {
+                                    setSignup(!signup);
+                                    setError('');
+                                }}>
+                                {signup ? 'J’ai déjà un compte' : 'Créer un compte'}
                             </Button>
-                        </Stack>
-                    </form>
-                    <Button
-                        variant="link"
-                        className="h-auto px-0"
-                        onClick={() => {
-                            setSignup(!signup);
-                            setError('');
-                        }}>
-                        {signup ? 'J’ai déjà un compte' : 'Créer un compte'}
-                    </Button>
-                </Stack>
-            </Card>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </main>
     );
 }
@@ -262,9 +346,14 @@ function ChargeForm({ onDone, charge, settings }: { onDone: () => void; charge?:
         <Card withBorder radius="md" p="lg">
             <form onSubmit={form.onSubmit(values => mutation.mutate(values))}>
                 <Stack>
-                    <Title order={2} size="h3">
-                        {charge ? 'Modifier la charge' : 'Nouvelle charge'}
-                    </Title>
+                    <div className="space-y-1">
+                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">
+                            Détail de la charge
+                        </p>
+                        <Title order={2} size="h3">
+                            {charge ? 'Modifier la charge' : 'Nouvelle charge'}
+                        </Title>
+                    </div>
                     {error && (
                         <Alert color="red" role="alert">
                             {error}
@@ -399,45 +488,105 @@ function ChargesView({ charges, settings }: { charges: Charge[]; settings: Setti
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<Charge | null>(null);
     return (
-        <Stack>
-            <Group justify="space-between">
-                <Title order={1}>Charges</Title>
-                <Button onClick={() => setAdding(true)}>Ajouter une charge</Button>
-            </Group>
+        <Stack gap="lg">
+            <PageHeading
+                eyebrow="Suivi financier"
+                title="Charges"
+                description="Consultez les appels de fonds, leur échéancier et le montant restant à régler."
+                actions={
+                    <Button onClick={() => setAdding(true)}>
+                        <Plus aria-hidden="true" /> Ajouter une charge
+                    </Button>
+                }
+            />
             {adding && <ChargeForm settings={settings} onDone={() => setAdding(false)} />}
             {editing && (
                 <ChargeForm key={editing.id} charge={editing} settings={settings} onDone={() => setEditing(null)} />
             )}
-            {charges.length === 0 && <Text c="dimmed">Aucune charge pour le moment.</Text>}
-            {charges.map(charge => (
-                <Card withBorder radius="md" p="lg" key={charge.id}>
-                    <Group justify="space-between">
-                        <div>
-                            <Text fw={600}>{charge.title}</Text>
-                            <Text c="dimmed" size="sm">
-                                {charge.category} · {displayDate(charge.date)}
-                            </Text>
-                        </div>
-                        <Badge>{money(charge.amount - charge.paid)} à payer</Badge>
-                    </Group>
-                    <Progress
-                        value={(charge.paid / charge.amount) * 100}
-                        mt="md"
-                        aria-label={`Avancement de ${charge.title}`}
-                    />
-                    <Text size="sm" c="dimmed" mt="xs">
-                        {money(charge.paid)} / {money(charge.amount)} · {charge.installments} échéance(s)
+            {charges.length === 0 ? (
+                <Card className="items-center py-12 text-center" p="lg">
+                    <span className="bg-muted text-muted-foreground mb-4 grid size-12 place-items-center rounded-full">
+                        <Receipt className="size-5" aria-hidden="true" />
+                    </span>
+                    <Title order={2} size="h3">
+                        Aucune charge enregistrée
+                    </Title>
+                    <Text c="dimmed" size="sm" className="mt-2 max-w-md">
+                        Ajoutez votre premier appel de fonds pour suivre son échéancier et les règlements associés.
                     </Text>
-                    {charge.schedule.map((item, index) => (
-                        <Text key={index} size="sm" c="dimmed">
-                            {displayDate(item.date)} : {money(item.amount)}
-                        </Text>
-                    ))}
-                    <Button variant="subtle" size="xs" mt="xs" onClick={() => setEditing(charge)}>
-                        Modifier
+                    <Button className="mt-5" onClick={() => setAdding(true)}>
+                        <Plus aria-hidden="true" /> Ajouter une charge
                     </Button>
                 </Card>
-            ))}
+            ) : (
+                <Card p="sm" className="overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+                        <div>
+                            <p className="text-sm font-semibold">Toutes les charges</p>
+                            <p className="text-muted-foreground mt-1 text-xs">{charges.length} enregistrement(s)</p>
+                        </div>
+                        <span className="text-muted-foreground text-xs">Montants en euros</span>
+                    </div>
+                    <Table.ScrollContainer minWidth={760}>
+                        <Table>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th className="ps-4">Charge</Table.Th>
+                                    <Table.Th>Échéances</Table.Th>
+                                    <Table.Th>Progression</Table.Th>
+                                    <Table.Th className="text-end">Montant</Table.Th>
+                                    <Table.Th className="text-end">Reste à payer</Table.Th>
+                                    <Table.Th className="pe-4 text-end">Action</Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {charges.map(charge => {
+                                    const remaining = charge.amount - charge.paid;
+                                    const progress = (charge.paid / charge.amount) * 100;
+                                    return (
+                                        <Table.Tr key={charge.id}>
+                                            <Table.Td className="py-4 ps-4">
+                                                <p className="max-w-64 truncate font-medium">{charge.title}</p>
+                                                <p className="text-muted-foreground mt-1 text-xs">
+                                                    {charge.category} · {displayDate(charge.date)}
+                                                </p>
+                                            </Table.Td>
+                                            <Table.Td>{charge.installments} échéance(s)</Table.Td>
+                                            <Table.Td className="min-w-36">
+                                                <div className="flex items-center gap-2">
+                                                    <Progress
+                                                        value={progress}
+                                                        aria-label={`Avancement de ${charge.title}`}
+                                                        className="h-2"
+                                                    />
+                                                    <span className="text-muted-foreground font-mono text-xs tabular-nums">
+                                                        {Math.round(progress)}%
+                                                    </span>
+                                                </div>
+                                            </Table.Td>
+                                            <Table.Td className="text-end font-mono tabular-nums">
+                                                {money(charge.amount)}
+                                            </Table.Td>
+                                            <Table.Td className="text-end font-mono font-medium tabular-nums">
+                                                {remaining > 0 ? (
+                                                    money(remaining)
+                                                ) : (
+                                                    <Badge variant="secondary">Soldée</Badge>
+                                                )}
+                                            </Table.Td>
+                                            <Table.Td className="pe-4 text-end">
+                                                <Button size="sm" variant="outline" onClick={() => setEditing(charge)}>
+                                                    Modifier
+                                                </Button>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
+                            </Table.Tbody>
+                        </Table>
+                    </Table.ScrollContainer>
+                </Card>
+            )}
         </Stack>
     );
 }
@@ -470,59 +619,79 @@ function PaymentForm({ charges, onDone }: { charges: Charge[]; onDone: () => voi
         <Card withBorder radius="md" p="lg">
             <form onSubmit={form.onSubmit(values => mutation.mutate(values))}>
                 <Stack>
-                    <Title order={2} size="h3">
-                        Nouveau paiement
-                    </Title>
+                    <div className="space-y-1">
+                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">Enregistrement</p>
+                        <Title order={2} size="h3">
+                            Nouveau paiement
+                        </Title>
+                    </div>
                     {error && (
                         <Alert color="red" role="alert">
                             {error}
                         </Alert>
                     )}
-                    <FrenchDateInput
-                        label="Date"
-                        value={form.values.date}
-                        onChange={value => form.setFieldValue('date', value)}
-                    />
-                    <TextInput label="Moyen de paiement" required {...form.getInputProps('category')} />
-                    <TextInput
-                        label="Montant en euros"
-                        placeholder="100,00"
-                        inputMode="decimal"
-                        required
-                        {...form.getInputProps('amount')}
-                    />
-                    <Text fw={600}>Répartir sur les charges en cours</Text>
-                    <Text size="sm" c="dimmed">
-                        Indiquez les montants à affecter. Le reste est conservé comme crédit non affecté.
-                    </Text>
-                    {charges
-                        .filter(charge => charge.paid < charge.amount)
-                        .map(charge => {
-                            const suggested =
-                                remainingInstallments(charge.schedule, charge.paid).find(item => item.amount > 0)
-                                    ?.amount ?? 0;
-                            return (
-                                <Group key={charge.id} align="end" wrap="nowrap">
-                                    <TextInput
-                                        style={{ flex: 1 }}
-                                        label={`${charge.title} — reste ${money(charge.amount - charge.paid)}`}
-                                        value={amounts[charge.id] ?? ''}
-                                        inputMode="decimal"
-                                        placeholder="0,00"
-                                        onChange={event =>
-                                            setAmounts({ ...amounts, [charge.id]: event.currentTarget.value })
-                                        }
-                                    />
-                                    <Button
-                                        variant="light"
-                                        onClick={() =>
-                                            setAmounts({ ...amounts, [charge.id]: (suggested / 100).toFixed(2) })
-                                        }>
-                                        Échéance {money(suggested)}
-                                    </Button>
-                                </Group>
-                            );
-                        })}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <FrenchDateInput
+                            label="Date"
+                            value={form.values.date}
+                            onChange={value => form.setFieldValue('date', value)}
+                        />
+                        <TextInput label="Moyen de paiement" required {...form.getInputProps('category')} />
+                        <TextInput
+                            label="Montant en euros"
+                            placeholder="100,00"
+                            inputMode="decimal"
+                            required
+                            {...form.getInputProps('amount')}
+                        />
+                    </div>
+                    <section className="space-y-3 border-t pt-5">
+                        <div className="space-y-1">
+                            <h3 className="font-semibold">Répartir sur les charges en cours</h3>
+                            <p className="text-muted-foreground text-sm">
+                                Indiquez les montants à affecter. Le reste est conservé comme crédit non affecté.
+                            </p>
+                        </div>
+                        {charges.filter(charge => charge.paid < charge.amount).length === 0 ? (
+                            <p className="bg-muted/50 text-muted-foreground rounded-lg px-4 py-3 text-sm">
+                                Aucune charge n’a de solde restant à régler.
+                            </p>
+                        ) : (
+                            charges
+                                .filter(charge => charge.paid < charge.amount)
+                                .map(charge => {
+                                    const suggested =
+                                        remainingInstallments(charge.schedule, charge.paid).find(
+                                            item => item.amount > 0,
+                                        )?.amount ?? 0;
+                                    return (
+                                        <div
+                                            key={charge.id}
+                                            className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                                            <TextInput
+                                                label={`${charge.title} — reste ${money(charge.amount - charge.paid)}`}
+                                                value={amounts[charge.id] ?? ''}
+                                                inputMode="decimal"
+                                                placeholder="0,00"
+                                                onChange={event =>
+                                                    setAmounts({ ...amounts, [charge.id]: event.currentTarget.value })
+                                                }
+                                            />
+                                            <Button
+                                                variant="outline"
+                                                onClick={() =>
+                                                    setAmounts({
+                                                        ...amounts,
+                                                        [charge.id]: (suggested / 100).toFixed(2),
+                                                    })
+                                                }>
+                                                <CalendarClock aria-hidden="true" /> Échéance {money(suggested)}
+                                            </Button>
+                                        </div>
+                                    );
+                                })
+                        )}
+                    </section>
                     <Group>
                         <Button type="submit" loading={mutation.isPending}>
                             Enregistrer
@@ -542,56 +711,105 @@ function PaymentsView({ charges, payments }: { charges: Charge[]; payments: Paym
     const [creditPayment, setCreditPayment] = useState<Payment | null>(null);
     const [editing, setEditing] = useState<Payment | null>(null);
     return (
-        <Stack>
-            <Group justify="space-between">
-                <Title order={1}>Paiements</Title>
-                <Button onClick={() => setAdding(true)}>Ajouter un paiement</Button>
-            </Group>
+        <Stack gap="lg">
+            <PageHeading
+                eyebrow="Suivi financier"
+                title="Paiements"
+                description="Retrouvez les règlements enregistrés et utilisez le crédit disponible pour affecter les charges."
+                actions={
+                    <Button onClick={() => setAdding(true)}>
+                        <Plus aria-hidden="true" /> Ajouter un paiement
+                    </Button>
+                }
+            />
             {adding && <PaymentForm charges={charges} onDone={() => setAdding(false)} />}
             {creditPayment && (
                 <CreditForm charges={charges} payment={creditPayment} onDone={() => setCreditPayment(null)} />
             )}
             {editing && <PaymentEdit key={editing.id} payment={editing} onDone={() => setEditing(null)} />}
             {payments.length === 0 ? (
-                <Text c="dimmed">Aucun paiement pour le moment.</Text>
+                <Card className="items-center py-12 text-center" p="lg">
+                    <span className="bg-muted text-muted-foreground mb-4 grid size-12 place-items-center rounded-full">
+                        <CreditCard className="size-5" aria-hidden="true" />
+                    </span>
+                    <Title order={2} size="h3">
+                        Aucun paiement enregistré
+                    </Title>
+                    <Text c="dimmed" size="sm" className="mt-2 max-w-md">
+                        Enregistrez un règlement pour le répartir sur une ou plusieurs charges.
+                    </Text>
+                    <Button className="mt-5" onClick={() => setAdding(true)}>
+                        <Plus aria-hidden="true" /> Ajouter un paiement
+                    </Button>
+                </Card>
             ) : (
-                <Table.ScrollContainer minWidth={600}>
-                    <Table>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>Date</Table.Th>
-                                <Table.Th>Moyen</Table.Th>
-                                <Table.Th>Libellé</Table.Th>
-                                <Table.Th>Montant</Table.Th>
-                                <Table.Th>Non affecté</Table.Th>
-                                <Table.Th>Action</Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {payments.map(p => (
-                                <Table.Tr key={p.id}>
-                                    <Table.Td>{displayDate(p.date)}</Table.Td>
-                                    <Table.Td>{p.category}</Table.Td>
-                                    <Table.Td>{p.label || '—'}</Table.Td>
-                                    <Table.Td>{money(p.amount)}</Table.Td>
-                                    <Table.Td>{money(p.amount - p.allocated)}</Table.Td>
-                                    <Table.Td>
-                                        <Group gap="xs">
-                                            {p.amount > p.allocated && (
-                                                <Button size="xs" variant="light" onClick={() => setCreditPayment(p)}>
-                                                    Utiliser le crédit
-                                                </Button>
-                                            )}
-                                            <Button size="xs" variant="subtle" onClick={() => setEditing(p)}>
-                                                Modifier
-                                            </Button>
-                                        </Group>
-                                    </Table.Td>
+                <Card p="sm" className="overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+                        <div>
+                            <p className="text-sm font-semibold">Historique des paiements</p>
+                            <p className="text-muted-foreground mt-1 text-xs">{payments.length} enregistrement(s)</p>
+                        </div>
+                        <span className="text-muted-foreground text-xs">Montants en euros</span>
+                    </div>
+                    <Table.ScrollContainer minWidth={760}>
+                        <Table>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th className="ps-4">Date</Table.Th>
+                                    <Table.Th>Moyen</Table.Th>
+                                    <Table.Th>Libellé</Table.Th>
+                                    <Table.Th className="text-end">Montant</Table.Th>
+                                    <Table.Th className="text-end">Affecté</Table.Th>
+                                    <Table.Th className="text-end">Crédit restant</Table.Th>
+                                    <Table.Th className="pe-4 text-end">Actions</Table.Th>
                                 </Table.Tr>
-                            ))}
-                        </Table.Tbody>
-                    </Table>
-                </Table.ScrollContainer>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {payments.map(payment => {
+                                    const available = payment.amount - payment.allocated;
+                                    return (
+                                        <Table.Tr key={payment.id}>
+                                            <Table.Td className="py-4 ps-4">{displayDate(payment.date)}</Table.Td>
+                                            <Table.Td>{payment.category}</Table.Td>
+                                            <Table.Td className="max-w-56 truncate">{payment.label || '—'}</Table.Td>
+                                            <Table.Td className="text-end font-mono tabular-nums">
+                                                {money(payment.amount)}
+                                            </Table.Td>
+                                            <Table.Td className="text-end font-mono tabular-nums">
+                                                {money(payment.allocated)}
+                                            </Table.Td>
+                                            <Table.Td className="text-end font-mono font-medium tabular-nums">
+                                                {available > 0 ? (
+                                                    money(available)
+                                                ) : (
+                                                    <Badge variant="secondary">Utilisé</Badge>
+                                                )}
+                                            </Table.Td>
+                                            <Table.Td className="pe-4">
+                                                <Group className="justify-end" gap="xs" wrap="nowrap">
+                                                    {available > 0 && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setCreditPayment(payment)}>
+                                                            Affecter
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => setEditing(payment)}>
+                                                        Modifier
+                                                    </Button>
+                                                </Group>
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    );
+                                })}
+                            </Table.Tbody>
+                        </Table>
+                    </Table.ScrollContainer>
+                </Card>
             )}
         </Stack>
     );
@@ -624,9 +842,12 @@ function PaymentEdit({ payment, onDone }: { payment: Payment; onDone: () => void
         <Card withBorder radius="md" p="lg">
             <form onSubmit={form.onSubmit(values => mutation.mutate(values))}>
                 <Stack>
-                    <Title order={2} size="h3">
-                        Modifier le paiement
-                    </Title>
+                    <div className="space-y-1">
+                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">Correction</p>
+                        <Title order={2} size="h3">
+                            Modifier le paiement
+                        </Title>
+                    </div>
                     {error && (
                         <Alert color="red" role="alert">
                             {error}
@@ -692,9 +913,12 @@ function CreditForm({ charges, payment, onDone }: { charges: Charge[]; payment: 
                     mutation.mutate();
                 }}>
                 <Stack>
-                    <Title order={2} size="h3">
-                        Utiliser le crédit de {money(payment.amount - payment.allocated)}
-                    </Title>
+                    <div className="space-y-1">
+                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">Affectation</p>
+                        <Title order={2} size="h3">
+                            Utiliser le crédit de {money(payment.amount - payment.allocated)}
+                        </Title>
+                    </div>
                     {error && (
                         <Alert color="red" role="alert">
                             {error}
@@ -725,110 +949,317 @@ function CreditForm({ charges, payment, onDone }: { charges: Charge[]; payment: 
     );
 }
 
+function MetricCard({
+    label,
+    value,
+    detail,
+    icon: Icon,
+}: {
+    label: string;
+    value: number;
+    detail: string;
+    icon: LucideIcon;
+}) {
+    return (
+        <Card p="lg" className="gap-4">
+            <div className="flex items-center justify-between gap-3">
+                <p className="text-muted-foreground text-sm font-medium">{label}</p>
+                <span className="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+                    <Icon className="size-4" aria-hidden="true" />
+                </span>
+            </div>
+            <div>
+                <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums">{money(value)}</p>
+                <p className="text-muted-foreground mt-1 text-xs">{detail}</p>
+            </div>
+        </Card>
+    );
+}
+
 function Overview({ charges, payments, ledger = false }: { charges: Charge[]; payments: Payment[]; ledger?: boolean }) {
-    const total = charges.reduce((sum, c) => sum + c.amount, 0);
-    const paid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const credit = payments.reduce((sum, p) => sum + p.amount - p.allocated, 0);
+    const total = charges.reduce((sum, charge) => sum + charge.amount, 0);
+    const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const credit = payments.reduce((sum, payment) => sum + payment.amount - payment.allocated, 0);
+    const outstanding = charges.reduce((sum, charge) => sum + charge.amount - charge.paid, 0);
     const movements = [
-        ...charges.map(c => ({ id: c.id, date: c.date, label: c.title, amount: -c.amount })),
-        ...payments.map(p => ({ id: p.id, date: p.date, label: p.label || p.category, amount: p.amount })),
+        ...charges.map(charge => ({
+            id: charge.id,
+            date: charge.date,
+            label: charge.title,
+            kind: 'Charge',
+            amount: -charge.amount,
+        })),
+        ...payments.map(payment => ({
+            id: payment.id,
+            date: payment.date,
+            label: payment.label || payment.category,
+            kind: 'Paiement',
+            amount: payment.amount,
+        })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     let running = 0;
-    const rows = movements.map(m => ({ ...m, balance: (running += m.amount) }));
-    const overdue = charges.reduce((sum, charge) => {
-        return (
+    const rows = movements.map(movement => ({ ...movement, balance: (running += movement.amount) }));
+    const recent = [...rows].reverse().slice(0, 5);
+    const overdue = charges.reduce(
+        (sum, charge) =>
             sum
             + remainingInstallments(charge.schedule, charge.paid).reduce(
                 (late, item) => late + (item.date < today() ? item.amount : 0),
                 0,
-            )
-        );
-    }, 0);
+            ),
+        0,
+    );
+    const upcoming = charges
+        .flatMap(charge =>
+            remainingInstallments(charge.schedule, charge.paid).map(item => ({
+                id: `${charge.id}-${item.date}`,
+                title: charge.title,
+                date: item.date,
+                amount: item.amount,
+            })),
+        )
+        .filter(item => item.amount > 0)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(0, 5);
+
     if (ledger)
         return (
-            <Stack>
-                <Title order={1}>Mouvements</Title>
-                <Text c="dimmed">Solde = paiements moins charges.</Text>
-                <Table.ScrollContainer minWidth={550}>
-                    <Table>
-                        <Table.Thead>
-                            <Table.Tr>
-                                <Table.Th>Date</Table.Th>
-                                <Table.Th>Libellé</Table.Th>
-                                <Table.Th>Mouvement</Table.Th>
-                                <Table.Th>Solde</Table.Th>
-                            </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                            {rows.map(row => (
-                                <Table.Tr key={row.id}>
-                                    <Table.Td>{displayDate(row.date)}</Table.Td>
-                                    <Table.Td>{row.label}</Table.Td>
-                                    <Table.Td>{money(row.amount)}</Table.Td>
-                                    <Table.Td>{money(row.balance)}</Table.Td>
-                                </Table.Tr>
-                            ))}
-                        </Table.Tbody>
-                    </Table>
-                </Table.ScrollContainer>
-                <Text fw={600}>Solde total : {money(paid - total)}</Text>
+            <Stack gap="lg">
+                <PageHeading
+                    eyebrow="Historique comptable"
+                    title="Mouvements"
+                    description="Un relevé chronologique des charges et des paiements, avec le solde cumulé."
+                />
+                <Card className="flex-row flex-wrap items-center justify-between gap-4" p="lg">
+                    <div>
+                        <p className="text-muted-foreground text-sm">Solde du compte</p>
+                        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{money(paid - total)}</p>
+                    </div>
+                    <p className="text-muted-foreground text-sm">Paiements − charges</p>
+                </Card>
+                {rows.length === 0 ? (
+                    <Card className="items-center py-12 text-center" p="lg">
+                        <span className="bg-muted text-muted-foreground mb-4 grid size-12 place-items-center rounded-full">
+                            <List className="size-5" aria-hidden="true" />
+                        </span>
+                        <Title order={2} size="h3">
+                            Aucun mouvement pour le moment
+                        </Title>
+                        <Text c="dimmed" size="sm" className="mt-2">
+                            Les charges et paiements apparaîtront ici.
+                        </Text>
+                    </Card>
+                ) : (
+                    <Card p="sm" className="overflow-hidden">
+                        <Table.ScrollContainer minWidth={650}>
+                            <Table>
+                                <Table.Thead>
+                                    <Table.Tr>
+                                        <Table.Th className="ps-4">Date</Table.Th>
+                                        <Table.Th>Nature</Table.Th>
+                                        <Table.Th>Libellé</Table.Th>
+                                        <Table.Th className="text-end">Mouvement</Table.Th>
+                                        <Table.Th className="pe-4 text-end">Solde cumulé</Table.Th>
+                                    </Table.Tr>
+                                </Table.Thead>
+                                <Table.Tbody>
+                                    {rows.map(row => (
+                                        <Table.Tr key={`${row.kind}-${row.id}`}>
+                                            <Table.Td className="py-4 ps-4">{displayDate(row.date)}</Table.Td>
+                                            <Table.Td>
+                                                <Badge variant={row.kind === 'Paiement' ? 'secondary' : 'outline'}>
+                                                    {row.kind}
+                                                </Badge>
+                                            </Table.Td>
+                                            <Table.Td className="max-w-72 truncate">{row.label}</Table.Td>
+                                            <Table.Td className="text-end font-mono tabular-nums">
+                                                {row.amount > 0 ? '+' : ''}
+                                                {money(row.amount)}
+                                            </Table.Td>
+                                            <Table.Td className="pe-4 text-end font-mono font-medium tabular-nums">
+                                                {money(row.balance)}
+                                            </Table.Td>
+                                        </Table.Tr>
+                                    ))}
+                                </Table.Tbody>
+                            </Table>
+                        </Table.ScrollContainer>
+                    </Card>
+                )}
             </Stack>
         );
+
     return (
-        <Stack>
-            <Title order={1}>Tableau de bord</Title>
-            <Text c="dimmed">Une vue claire de vos charges et de vos paiements.</Text>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {[
-                    ['Solde', paid - total],
-                    ['Charges restantes', charges.reduce((sum, c) => sum + c.amount - c.paid, 0)],
-                    ['Crédit non affecté', credit],
-                    ['Échéances en retard', overdue],
-                ].map(([label, value]) => (
-                    <Card key={String(label)} withBorder radius="md" p="lg">
-                        <Text c="dimmed" size="sm">
-                            {label}
-                        </Text>
-                        <Title order={2}>{money(Number(value))}</Title>
-                    </Card>
-                ))}
-            </div>
-            {rows.length > 0 && (
-                <Card withBorder radius="md" p="lg">
-                    <Title order={2} size="h3" mb="lg">
-                        Évolution du solde
-                    </Title>
-                    <div role="img" aria-label="Graphique de l’évolution du solde en euros">
-                        <ResponsiveContainer width="100%" height={240}>
-                            <RechartsLineChart
-                                accessibilityLayer
-                                data={rows.map(row => ({ date: displayDate(row.date), solde: row.balance / 100 }))}
-                                margin={{ top: 8, right: 12, bottom: 0, left: 8 }}>
-                                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                                <YAxis
-                                    width={88}
-                                    tickLine={false}
-                                    axisLine={false}
-                                    tickFormatter={value => money(Number(value) * 100)}
-                                />
-                                <Tooltip formatter={value => [money(Number(value) * 100), 'Solde']} />
-                                <Line
-                                    dataKey="solde"
-                                    type="linear"
-                                    stroke="var(--primary)"
-                                    strokeWidth={2}
-                                    dot={false}
-                                    activeDot={{ r: 4 }}
-                                />
-                            </RechartsLineChart>
-                        </ResponsiveContainer>
+        <Stack gap="lg">
+            <PageHeading
+                eyebrow="Vue d’ensemble"
+                title="Tableau de bord"
+                description="Une lecture rapide de votre solde, des sommes à régler et des prochaines échéances."
+                actions={
+                    <>
+                        <Button asChild variant="outline">
+                            <Link to="/payments">Enregistrer un paiement</Link>
+                        </Button>
+                        <Button asChild>
+                            <Link to="/charges">
+                                <Plus aria-hidden="true" /> Nouvelle charge
+                            </Link>
+                        </Button>
+                    </>
+                }
+            />
+            <section aria-label="Résumé financier" className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                <MetricCard
+                    label="Solde du compte"
+                    value={paid - total}
+                    detail="Paiements moins charges"
+                    icon={CircleDollarSign}
+                />
+                <MetricCard
+                    label="Charges restantes"
+                    value={outstanding}
+                    detail="Montant encore à régler"
+                    icon={Receipt}
+                />
+                <MetricCard
+                    label="Crédit non affecté"
+                    value={credit}
+                    detail="Disponible pour affectation"
+                    icon={Wallet}
+                />
+                <MetricCard
+                    label="Échéances en retard"
+                    value={overdue}
+                    detail="Selon les échéances enregistrées"
+                    icon={Clock3}
+                />
+            </section>
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.85fr)]">
+                <Card p="lg" className="min-w-0 gap-4">
+                    <div>
+                        <h2 className="font-semibold tracking-tight">Évolution du solde</h2>
+                        <p className="text-muted-foreground mt-1 text-sm">
+                            Solde cumulé après chaque mouvement enregistré.
+                        </p>
                     </div>
+                    {rows.length === 0 ? (
+                        <div className="bg-muted/40 text-muted-foreground grid min-h-56 place-items-center rounded-lg text-center text-sm">
+                            Le graphique apparaîtra après l’enregistrement d’un premier mouvement.
+                        </div>
+                    ) : (
+                        <div role="img" aria-label="Graphique de l’évolution du solde en euros">
+                            <ResponsiveContainer width="100%" height={260}>
+                                <RechartsLineChart
+                                    accessibilityLayer
+                                    data={rows.map(row => ({ date: displayDate(row.date), solde: row.balance / 100 }))}
+                                    margin={{ top: 8, right: 12, bottom: 0, left: 8 }}>
+                                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                                    <YAxis
+                                        width={84}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        tickFormatter={value => money(Number(value) * 100)}
+                                    />
+                                    <Tooltip formatter={value => [money(Number(value) * 100), 'Solde']} />
+                                    <Line
+                                        dataKey="solde"
+                                        type="linear"
+                                        stroke="var(--primary)"
+                                        strokeWidth={2.5}
+                                        dot={false}
+                                        activeDot={{ r: 4 }}
+                                    />
+                                </RechartsLineChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
                 </Card>
-            )}
-            <Text size="sm" c="dimmed">
-                Les retards sont calculés selon les échéances enregistrées.
-            </Text>
+                <Card p="lg" className="gap-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 className="font-semibold tracking-tight">Échéances à suivre</h2>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                                Les plus proches, selon vos échéanciers.
+                            </p>
+                        </div>
+                        <CalendarDays className="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    </div>
+                    {upcoming.length === 0 ? (
+                        <div className="bg-muted/40 text-muted-foreground rounded-lg px-4 py-5 text-sm">
+                            Aucune échéance restante n’est enregistrée.
+                        </div>
+                    ) : (
+                        <ul className="divide-y">
+                            {upcoming.map(item => {
+                                const isLate = item.date < today();
+                                return (
+                                    <li
+                                        key={item.id}
+                                        className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{item.title}</p>
+                                            <p className="text-muted-foreground mt-1 text-xs">
+                                                {displayDate(item.date)} · {isLate ? 'En retard' : 'À venir'}
+                                            </p>
+                                        </div>
+                                        <p className="shrink-0 font-mono text-sm font-medium tabular-nums">
+                                            {money(item.amount)}
+                                        </p>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                    <Button asChild variant="outline" className="mt-auto w-full">
+                        <Link to="/charges">Consulter les charges</Link>
+                    </Button>
+                </Card>
+            </div>
+            <Card p="sm" className="overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+                    <div>
+                        <h2 className="text-sm font-semibold">Derniers mouvements</h2>
+                        <p className="text-muted-foreground mt-1 text-xs">Les cinq mouvements les plus récents.</p>
+                    </div>
+                    <Button asChild variant="ghost" size="sm">
+                        <Link to="/ledger">Tout voir</Link>
+                    </Button>
+                </div>
+                {recent.length === 0 ? (
+                    <p className="text-muted-foreground px-4 py-8 text-center text-sm">Aucun mouvement enregistré.</p>
+                ) : (
+                    <Table.ScrollContainer minWidth={540}>
+                        <Table>
+                            <Table.Thead>
+                                <Table.Tr>
+                                    <Table.Th className="ps-4">Date</Table.Th>
+                                    <Table.Th>Nature</Table.Th>
+                                    <Table.Th>Libellé</Table.Th>
+                                    <Table.Th className="pe-4 text-end">Montant</Table.Th>
+                                </Table.Tr>
+                            </Table.Thead>
+                            <Table.Tbody>
+                                {recent.map(row => (
+                                    <Table.Tr key={`${row.kind}-${row.id}`}>
+                                        <Table.Td className="ps-4">{displayDate(row.date)}</Table.Td>
+                                        <Table.Td>
+                                            <Badge variant={row.kind === 'Paiement' ? 'secondary' : 'outline'}>
+                                                {row.kind}
+                                            </Badge>
+                                        </Table.Td>
+                                        <Table.Td className="max-w-72 truncate">{row.label}</Table.Td>
+                                        <Table.Td className="pe-4 text-end font-mono tabular-nums">
+                                            {row.amount > 0 ? '+' : ''}
+                                            {money(row.amount)}
+                                        </Table.Td>
+                                    </Table.Tr>
+                                ))}
+                            </Table.Tbody>
+                        </Table>
+                    </Table.ScrollContainer>
+                )}
+            </Card>
         </Stack>
     );
 }
@@ -877,9 +1308,23 @@ export function App() {
         }
         client.clear();
     }
-    if (session.isPending) return <Text p="xl">Chargement…</Text>;
+    if (session.isPending)
+        return (
+            <main className="bg-background grid min-h-screen place-items-center p-6">
+                <div className="text-muted-foreground flex items-center gap-3 text-sm" role="status">
+                    <span className="border-primary size-5 animate-spin rounded-full border-2 border-e-transparent" />
+                    Vérification de la session…
+                </div>
+            </main>
+        );
     if (session.error)
-        return <Alert color="red">Impossible de vérifier la session. Vérifiez que le serveur fonctionne.</Alert>;
+        return (
+            <main className="bg-background grid min-h-screen place-items-center p-6">
+                <Alert color="red" className="max-w-lg" role="alert">
+                    Impossible de vérifier la session. Vérifiez que le serveur fonctionne.
+                </Alert>
+            </main>
+        );
     if (!session.data) return <Login />;
     const items = [
         { path: '/', label: 'Tableau de bord', icon: Home },
@@ -889,20 +1334,28 @@ export function App() {
         { path: '/settings', label: 'Paramètres', icon: Settings },
         { path: '/import', label: 'Importer', icon: Upload },
     ];
+    const currentItem = items.find(item => item.path === location.pathname);
     return (
-        <div className="bg-background min-h-screen md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
-            <header className="bg-card/95 sticky top-0 z-40 flex min-h-16 items-center justify-between border-b px-4 backdrop-blur md:col-span-2 md:px-6">
+        <div className="bg-background min-h-screen md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
+            <header className="bg-card/95 sticky top-0 z-40 flex min-h-16 items-center justify-between border-b px-4 backdrop-blur md:col-start-2 md:row-start-1 md:px-8">
                 <div className="flex items-center gap-3">
                     <Button
                         variant="subtle"
                         size="icon"
                         className="md:hidden"
                         aria-label={opened ? 'Fermer le menu' : 'Ouvrir le menu'}
+                        aria-controls="primary-navigation"
                         aria-expanded={opened}
                         onClick={() => setOpened(value => !value)}>
                         {opened ? <X /> : <Menu />}
                     </Button>
-                    <span className="font-semibold tracking-tight">ChargesTBA</span>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground hidden sm:inline">ChargesTBA</span>
+                        <span className="text-muted-foreground hidden sm:inline" aria-hidden="true">
+                            /
+                        </span>
+                        <span className="font-medium">{currentItem?.label ?? 'Tableau de bord'}</span>
+                    </div>
                 </div>
                 <div className="flex items-center gap-1">
                     <Button
@@ -914,8 +1367,8 @@ export function App() {
                         {colorScheme === 'dark' ? <Sun /> : <Moon />}
                     </Button>
                     <form onSubmit={signOut}>
-                        <Button type="submit" variant="subtle">
-                            Déconnexion
+                        <Button type="submit" variant="subtle" className="gap-2">
+                            <LogOut aria-hidden="true" /> <span className="hidden sm:inline">Déconnexion</span>
                         </Button>
                     </form>
                 </div>
@@ -924,34 +1377,61 @@ export function App() {
                 <button
                     type="button"
                     aria-label="Fermer le menu"
-                    className="fixed inset-0 z-30 bg-black/40 md:hidden"
+                    className="bg-foreground/30 fixed inset-0 z-30 backdrop-blur-sm md:hidden"
                     onClick={() => setOpened(false)}
                 />
             )}
             <aside
-                className={`${opened ? 'block' : 'hidden'} bg-card fixed top-16 left-0 z-40 h-[calc(100dvh-4rem)] w-60 overflow-y-auto border-r p-3 md:sticky md:top-16 md:row-start-2 md:block md:h-[calc(100vh-4rem)]`}>
+                id="primary-navigation"
+                className={`${opened ? 'flex' : 'hidden'} bg-card fixed start-0 top-16 z-40 h-[calc(100dvh-4rem)] w-72 flex-col border-e p-4 shadow-xl md:sticky md:top-0 md:row-span-2 md:row-start-1 md:flex md:h-screen md:w-auto md:shadow-none`}>
+                <div className="mb-10 flex items-center gap-3 px-2 pt-2">
+                    <span className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-xl">
+                        <Building2 className="size-5" aria-hidden="true" />
+                    </span>
+                    <div>
+                        <p className="font-semibold tracking-tight">ChargesTBA</p>
+                        <p className="text-muted-foreground text-xs">Gestion de copropriété</p>
+                    </div>
+                </div>
                 <nav aria-label="Navigation principale" className="grid gap-1">
-                    {items.map(({ path, label, icon: Icon }) => (
-                        <Link
-                            key={path}
-                            to={path}
-                            onClick={() => setOpened(false)}
-                            aria-current={location.pathname === path ? 'page' : undefined}
-                            className={`hover:bg-accent hover:text-accent-foreground flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${location.pathname === path ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'}`}>
-                            <Icon className="size-4" aria-hidden="true" />
-                            {label}
-                        </Link>
-                    ))}
+                    <p className="text-muted-foreground mb-2 px-3 text-xs font-semibold tracking-wider uppercase">
+                        Espace de travail
+                    </p>
+                    {items.map(({ path, label, icon: Icon }) => {
+                        const active = location.pathname === path;
+                        return (
+                            <Link
+                                key={path}
+                                to={path}
+                                onClick={() => setOpened(false)}
+                                aria-current={active ? 'page' : undefined}
+                                className={`focus-visible:ring-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none ${active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                                <Icon className="size-4" aria-hidden="true" />
+                                {label}
+                            </Link>
+                        );
+                    })}
                 </nav>
+                <div className="mt-auto border-t px-2 pt-4">
+                    <div className="bg-muted/60 rounded-lg p-3">
+                        <p className="text-xs font-medium">Prototype local</p>
+                        <p className="text-muted-foreground mt-1 text-xs leading-5">
+                            Vos données sont conservées dans cette installation.
+                        </p>
+                    </div>
+                </div>
             </aside>
-            <main className="min-w-0 p-4 sm:p-6 md:col-start-2 md:row-start-2 lg:p-8">
-                <div className="mx-auto w-full max-w-6xl">
+            <main className="min-w-0 p-4 sm:p-6 md:col-start-2 md:row-start-2 md:px-8 md:py-7 lg:px-10">
+                <div className="mx-auto w-full max-w-7xl">
                     {charges.isError || payments.isError || settings.isError ? (
                         <Alert color="red" role="alert">
                             Impossible de charger les données.
                         </Alert>
                     ) : !charges.data || !payments.data || !settings.data ? (
-                        <Text>Chargement…</Text>
+                        <div className="text-muted-foreground flex items-center gap-3 py-12 text-sm" role="status">
+                            <span className="border-primary size-5 animate-spin rounded-full border-2 border-e-transparent" />
+                            Chargement de vos données…
+                        </div>
                     ) : (
                         <Suspense fallback={<Text>Chargement…</Text>}>
                             <Routes>

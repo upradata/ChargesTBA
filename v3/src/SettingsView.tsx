@@ -1,11 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { hc } from 'hono/client';
+import { CalendarRange, Plus, Tags } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 import type { AppType } from '../server/app';
 import type { ScheduleRule } from '../shared/schedule';
 
 import type { Settings } from './App';
+import { PageHeading } from './components/PageHeading';
 import {
     Alert,
     Button,
@@ -235,77 +237,155 @@ export function SettingsView({ settings }: { settings: Settings }) {
         }
     }
     return (
-        <Stack>
-            <Title order={1}>Paramètres</Title>
+        <Stack gap="lg">
+            <PageHeading
+                eyebrow="Configuration"
+                title="Paramètres"
+                description="Personnalisez vos catégories et les échéanciers proposés lors de la saisie des charges."
+            />
             {error && (
                 <Alert color="red" role="alert">
                     {error}
                 </Alert>
             )}
-            <Group justify="space-between">
-                <Title order={2}>Catégories</Title>
-                <Button onClick={() => setEditingCategory('new')}>Ajouter une catégorie</Button>
-            </Group>
-            {editingCategory && (
-                <CategoryEditor
-                    key={editingCategory}
-                    category={settings.categories.find(item => item.id === editingCategory)}
-                    templates={settings.templates}
-                    done={done}
-                />
-            )}
-            {settings.categories.map(category => (
-                <Card withBorder key={category.id}>
-                    <Group justify="space-between">
-                        <div>
-                            <Text fw={600}>{category.name}</Text>
-                            <Text size="sm" c="dimmed">
-                                {settings.templates.find(item => item.id === category.defaultScheduleId)?.name
-                                    ?? 'Paiement unique'}
-                            </Text>
+            <div className="grid items-start gap-6 xl:grid-cols-2">
+                <section className="space-y-4" aria-labelledby="categories-heading">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-lg">
+                                <Tags className="size-4" aria-hidden="true" />
+                            </span>
+                            <div>
+                                <h2 id="categories-heading" className="font-semibold">
+                                    Catégories
+                                </h2>
+                                <p className="text-muted-foreground text-xs">
+                                    {settings.categories.length} catégorie(s)
+                                </p>
+                            </div>
                         </div>
-                        <Group>
-                            <Button variant="subtle" onClick={() => setEditingCategory(category.id)}>
-                                Modifier
-                            </Button>
-                            <Button variant="subtle" color="red" onClick={() => void remove('category', category.id)}>
-                                Supprimer
-                            </Button>
-                        </Group>
-                    </Group>
-                </Card>
-            ))}
-            <Group justify="space-between">
-                <Title order={2}>Échéanciers réutilisables</Title>
-                <Button onClick={() => setEditingTemplate('new')}>Ajouter un échéancier</Button>
-            </Group>
-            {editingTemplate && (
-                <TemplateEditor
-                    key={editingTemplate}
-                    template={settings.templates.find(item => item.id === editingTemplate)}
-                    done={done}
-                />
-            )}
-            {settings.templates.map(template => (
-                <Card withBorder key={template.id}>
-                    <Group justify="space-between">
-                        <div>
-                            <Text fw={600}>{template.name}</Text>
-                            <Text size="sm" c="dimmed">
-                                {template.rules.length} échéance(s)
-                            </Text>
+                        <Button size="sm" variant="outline" onClick={() => setEditingCategory('new')}>
+                            <Plus aria-hidden="true" /> Ajouter
+                        </Button>
+                    </div>
+                    {editingCategory && (
+                        <CategoryEditor
+                            key={editingCategory}
+                            category={settings.categories.find(item => item.id === editingCategory)}
+                            templates={settings.templates}
+                            done={done}
+                        />
+                    )}
+                    <Card p="sm" className="overflow-hidden">
+                        {settings.categories.length === 0 ? (
+                            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+                                Aucune catégorie. Ajoutez-en une pour classer vos charges.
+                            </p>
+                        ) : (
+                            <ul className="divide-y">
+                                {settings.categories.map(category => (
+                                    <li
+                                        key={category.id}
+                                        className="flex flex-wrap items-center justify-between gap-3 px-2 py-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{category.name}</p>
+                                            <p className="text-muted-foreground mt-1 text-xs">
+                                                {settings.templates.find(item => item.id === category.defaultScheduleId)
+                                                    ?.name ?? 'Paiement unique'}
+                                            </p>
+                                        </div>
+                                        <Group gap="xs">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => setEditingCategory(category.id)}>
+                                                Modifier
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="subtle"
+                                                color="red"
+                                                onClick={() => void remove('category', category.id)}>
+                                                Supprimer
+                                            </Button>
+                                        </Group>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </Card>
+                </section>
+                <section className="space-y-4" aria-labelledby="templates-heading">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <span className="bg-muted text-muted-foreground grid size-10 place-items-center rounded-lg">
+                                <CalendarRange className="size-4" aria-hidden="true" />
+                            </span>
+                            <div>
+                                <h2 id="templates-heading" className="font-semibold">
+                                    Échéanciers réutilisables
+                                </h2>
+                                <p className="text-muted-foreground text-xs">{settings.templates.length} modèle(s)</p>
+                            </div>
                         </div>
-                        <Group>
-                            <Button variant="subtle" onClick={() => setEditingTemplate(template.id)}>
-                                Modifier
-                            </Button>
-                            <Button variant="subtle" color="red" onClick={() => void remove('template', template.id)}>
-                                Supprimer
-                            </Button>
-                        </Group>
-                    </Group>
-                </Card>
-            ))}
+                        <Button size="sm" variant="outline" onClick={() => setEditingTemplate('new')}>
+                            <Plus aria-hidden="true" /> Ajouter
+                        </Button>
+                    </div>
+                    {editingTemplate && (
+                        <TemplateEditor
+                            key={editingTemplate}
+                            template={settings.templates.find(item => item.id === editingTemplate)}
+                            done={done}
+                        />
+                    )}
+                    <Card p="sm" className="overflow-hidden">
+                        {settings.templates.length === 0 ? (
+                            <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+                                Aucun échéancier réutilisable. Les charges peuvent toujours être enregistrées avec un
+                                paiement unique.
+                            </p>
+                        ) : (
+                            <ul className="divide-y">
+                                {settings.templates.map(template => (
+                                    <li
+                                        key={template.id}
+                                        className="flex flex-wrap items-center justify-between gap-3 px-2 py-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">{template.name}</p>
+                                            <p className="text-muted-foreground mt-1 text-xs">
+                                                {template.rules.length} échéance(s) ·{' '}
+                                                {template.rules
+                                                    .map(rule => `M+${rule.monthOffset}, j${rule.day}`)
+                                                    .join(' · ')}
+                                            </p>
+                                        </div>
+                                        <Group gap="xs">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => setEditingTemplate(template.id)}>
+                                                Modifier
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="subtle"
+                                                color="red"
+                                                onClick={() => void remove('template', template.id)}>
+                                                Supprimer
+                                            </Button>
+                                        </Group>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </Card>
+                </section>
+            </div>
+            <Alert>
+                Modifier un échéancier réutilisable ne change pas les échéances déjà enregistrées sur les charges
+                existantes.
+            </Alert>
         </Stack>
     );
 }
