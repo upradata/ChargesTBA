@@ -10,6 +10,7 @@ Present structured charges, payments, imported rows, or chronological movements 
 - Import preview: `v3/src/ImportView.tsx`.
 - Product requirements: `v3/PROJECT-PLAN.md`.
 - Candidate external references: [Twenty](../references/products/twenty.md), [Plane](../references/products/plane.md); only documentation was inspected.
+- External product comparison: [shadcn-fintech](../references/products/shadcn-fintech.md), with source and live-page inspection plus desktop/mobile screenshots; see visual evidence links below.
 
 ## Design principles
 
@@ -18,6 +19,7 @@ Present structured charges, payments, imported rows, or chronological movements 
 - Use tabular numerals for financial comparisons where the local type scale supports them.
 - Avoid using color alone to convey payment or validation status.
 - Show a useful empty state and keep long labels from obscuring amounts or actions.
+- If hiding columns at narrow breakpoints, keep essential financial information accessible and test the actual narrow layout; column hiding is not automatically better than horizontal scrolling.
 
 ## Layout
 
@@ -29,6 +31,7 @@ Present structured charges, payments, imported rows, or chronological movements 
 
 - The import preview table is read-only; correction and duplicate approval occur through the surrounding workflow.
 - Sorting, filtering, row selection, pagination, and column visibility are not evidenced by the inspected import table. Do not claim or add them by default.
+- External source comparison: shadcn-fintech’s transaction page composes summary metrics, search/category/status/type filters, selectable rows with CSV export, expandable detail rows, and an empty-filter state. Its source hides transaction ID/date/status at progressively larger breakpoints. These are not behaviors of ChargesTBA’s import table.
 
 ## Responsive behavior
 
@@ -38,6 +41,7 @@ Present structured charges, payments, imported rows, or chronological movements 
 
 - Shared primitive uses table, thead, tbody, tr, th, and td elements. Verify header associations and reading order in the rendered table.
 - Ensure any future sort/selection controls expose state and keyboard behavior.
+- For custom row expansion or selection, avoid making pointer row-click the only way to reach details; verify focus, semantics, and checkbox/row event behavior in the composed table.
 
 ## Implementation notes
 
@@ -57,3 +61,10 @@ Present structured charges, payments, imported rows, or chronological movements 
 - Implemented: yes — shared table, charge/payment/ledger tables, and import preview are in source.
 - Verified: no — responsive table behavior and keyboard interaction were not visually/keyboard verified.
 - Approved: no.
+
+## External reference comparison — shadcn-fintech
+
+- **Observed — source, screenshots, and browser interaction, 2026-11-15:** The [desktop transactions table](../screenshots/products/shadcn-fintech-transactions-1440x1000.png) and mobile [dashboard recent-transactions table](../screenshots/products/shadcn-fintech-dashboard-mobile-390x844.png) were visually inspected. On the transactions page, searching Spotify reduced the table to one row, and clicking that row opened its detail row. Selection/export behavior remains source-inspected only. Details are in [the product reference](../references/products/shadcn-fintech.md).
+- **Evaluated:** Summary + filters + results is a useful candidate structure for genuinely large transaction histories. Select/export and expandable details should be added only when they solve a ChargesTBA task; the existing CSV import preview is intentionally a different, review-oriented workflow.
+- **Adaptation status:** No table behavior from the external reference was implemented in ChargesTBA.
+- **Evidence limit:** The mobile dashboard screenshot shows a transaction amount clipped at the right edge. A mobile screenshot of the full Transactions route, keyboard operation, and accessibility were not tested; source breakpoint classes alone do not prove readable responsive tables.
