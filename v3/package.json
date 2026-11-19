@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "build": "vp build",
-        "dev": "concurrently -k \"pnpm dev:server\" \"pnpm dev:client\"",
+        "dev": "concurrently -k \"pnpm dev:server\" \"tsx server/wait-for-api.ts && pnpm dev:client\"",
         "dev:client": "vp dev",
         "dev:server": "tsx watch server/index.ts",
         "test": "vp test run",
