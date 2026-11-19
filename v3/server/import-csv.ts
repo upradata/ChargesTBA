@@ -1,9 +1,18 @@
 import { addMonths } from '../shared/schedule';
 
-export type ImportKind = 'charges' | 'payments' | 'solde';
+type CategorizedRow = {
+          row: number;
+          date: string;
+          title: string;
+          category: string;
+          categoryId: string;
+          amount: number;
+      };
 export type ImportRow =
-    | { row: number; kind: 'charge'; date: string; title: string; category: string; amount: number }
+    | (CategorizedRow & { kind: 'charge' })
+    | (CategorizedRow & { kind: 'refund' })
     | { row: number; kind: 'payment'; date: string; label: string | null; category: string; amount: number };
+export type ImportCategory = { id: string; name: string };
 export type ImportError = { row: number; column: string; message: string };
 export const MAX_CSV_BYTES = 1_000_000;
 export const MAX_CSV_ROWS = 1000;
@@ -12,11 +21,6 @@ const aliases: Record<string, string> = {
     date: 'date',
     label: 'label',
     libelle: 'label',
-    type: 'type',
-    category: 'type',
-    categorie: 'type',
-    amount: 'amount',
-    montant: 'amount',
     credit: 'credit',
     debit: 'debit',
 };
@@ -104,14 +108,14 @@ function parseDate(value: string): string {
 }
 
 function parseAmount(value: string): number {
-    const match = /^(\d{1,7})(?:[,.](\d{1,2}))?$/.exec(value.trim());
+    const match = /^(-?)(\d{1,7})(?:[,.](\d{1,2}))?$/.exec(value.trim());
     if (!match) throw new Error('Montant invalide (deux décimales au maximum).');
-    const result = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+    const result = Number(match[2]) * 100 + Number((match[3] ?? '').padEnd(2, '0'));
     if (result > 100_000_000) throw new Error('Montant supérieur à la limite autorisée.');
-    return result;
+    return match[1] ? -result : result;
 }
 
-export function parseImport(kind: ImportKind, csv: string): { rows: ImportRow[]; errors: ImportError[] } {
+export function parseImport(csv: string, categories: ImportCategory[]): { rows: ImportRow[]; errors: ImportError[] } {
     const errors: ImportError[] = [];
     const rows: ImportRow[] = [];
     if (new TextEncoder().encode(csv).length > MAX_CSV_BYTES)
@@ -128,21 +132,17 @@ export function parseImport(kind: ImportKind, csv: string): { rows: ImportRow[];
     const header = parsed[0];
     if (!header) return { rows, errors: [{ row: 1, column: 'en-tête', message: 'Fichier vide.' }] };
     const names = header.fields.map(value => aliases[headerName(value)] ?? headerName(value));
-    const required =
-        kind === 'charges'
-            ? ['date', 'label', 'type', 'amount']
-            : kind === 'payments'
-              ? ['date', 'type', 'amount']
-              : ['date', 'label', 'type', 'credit', 'debit'];
+    const required = ['date', 'label', 'credit', 'debit'];
     const missing = required.filter(name => !names.includes(name));
-    if (missing.length || new Set(names).size !== names.length) {
+    if (missing.length || new Set(names).size !== names.length || names.some(name => !required.includes(name))) {
         return {
             rows,
             errors: [
                 {
                     row: header.row,
                     column: 'en-tête',
-                    message: missing.length ? `Colonnes manquantes : ${missing.join(', ')}.` : 'Colonnes en double.',
+                    message:
+                        'Utilisez exactement les quatre colonnes date, libellé, crédit, débit (anglais : date, label, credit, debit), dans l’ordre souhaité et sans doublon. Les anciens formats type/amount ne sont plus acceptés.',
                 },
             ],
         };
@@ -162,33 +162,44 @@ export function parseImport(kind: ImportKind, csv: string): { rows: ImportRow[];
         } catch {
             issue('date', 'Date invalide.');
         }
-        const category = value('type');
-        if (!category || category.length > 80) issue('type', 'Type requis (80 caractères maximum).');
         const label = value('label');
-        if ((kind !== 'payments' && !label) || label.length > 120)
-            issue('label', 'Libellé requis (120 caractères maximum).');
+        if (label.length > 120) issue('libellé', 'Libellé trop long (120 caractères maximum).');
         let amount = 0;
-        let rowKind: 'charge' | 'payment' = kind === 'charges' ? 'charge' : 'payment';
+        let rowKind: 'charge' | 'payment' | 'refund' = 'payment';
         try {
-            if (kind === 'solde') {
-                const credit = value('credit') ? parseAmount(value('credit')) : 0;
-                const debit = value('debit') ? parseAmount(value('debit')) : 0;
-                if (credit > 0 === debit > 0) throw new Error('Indiquez un seul crédit ou débit positif.');
-                rowKind = debit > 0 ? 'charge' : 'payment';
-                amount = debit || credit;
-            } else {
-                amount = parseAmount(value('amount'));
-                if (!amount) throw new Error('Le montant doit être supérieur à zéro.');
-            }
+            const credit = value('credit') ? parseAmount(value('credit')) : 0;
+            const debit = value('debit') ? parseAmount(value('debit')) : 0;
+            if (credit < 0) throw new Error('Un crédit doit être positif. Un remboursement est un débit négatif.');
+            if ((credit !== 0) === (debit !== 0))
+                throw new Error('Renseignez un seul crédit ou débit non nul ; laissez l’autre vide ou à zéro.');
+            rowKind = debit < 0 ? 'refund' : debit > 0 ? 'charge' : 'payment';
+            amount = Math.abs(debit || credit);
         } catch (error) {
-            issue(
-                kind === 'solde' ? 'credit/debit' : 'amount',
-                error instanceof Error ? error.message : 'Montant invalide.',
-            );
+            issue('crédit/débit', error instanceof Error ? error.message : 'Montant invalide.');
+        }
+        let category: ImportCategory | undefined;
+        if (rowKind !== 'payment') {
+            const matches = categories.filter(item => item.name.trim().toLowerCase() === label.trim().toLowerCase());
+            if (!label) issue('libellé', 'Libellé requis pour une charge ou un remboursement.');
+            else if (!matches.length)
+                issue('libellé', 'Aucune catégorie correspondante. Créez ou corrigez la catégorie dans Paramètres.');
+            else if (matches.length > 1)
+                issue('libellé', 'Plusieurs catégories correspondent. Corrigez les noms dans Paramètres.');
+            else category = matches[0];
         }
         if (errors.some(error => error.row === entry.row)) continue;
-        if (rowKind === 'charge') rows.push({ row: entry.row, kind: 'charge', date, title: label, category, amount });
-        else rows.push({ row: entry.row, kind: 'payment', date, label: label || null, category, amount });
+        if (rowKind !== 'payment' && category)
+            rows.push({
+                row: entry.row,
+                kind: rowKind,
+                date,
+                title: label,
+                category: category.name,
+                categoryId: category.id,
+                amount,
+            });
+        else if (rowKind === 'payment')
+            rows.push({ row: entry.row, kind: 'payment', date, label: label || null, category: 'Paiement importé', amount });
     }
     return { rows, errors };
 }

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { zValidator } from '@hono/zod-validator';
 import { betterAuth } from 'better-auth';
@@ -11,7 +11,8 @@ import { z } from 'zod';
 import { addMonths, splitCents, type Installment, type ScheduleRule } from '../shared/schedule';
 
 import { allocations, charges, payments, type openDatabase } from './db';
-import { MAX_CSV_BYTES, parseImport, type ImportRow } from './import-csv';
+import { MAX_CSV_BYTES } from './import-csv';
+import { commitImport, previewImport, validateProposals } from './import-preview';
 
 type Store = ReturnType<typeof openDatabase>;
 const date = z.iso.date().refine(value => {
@@ -76,45 +77,20 @@ const allocationInput = z.object({
         .max(100),
 });
 const importInput = z.object({
-    kind: z.enum(['charges', 'payments', 'solde']),
     csv: z.string().max(MAX_CSV_BYTES),
     commit: z.boolean(),
     approvedDuplicates: z.array(z.string().max(100)).max(2000),
+    snapshot: z.string().length(64).optional(),
+    proposals: z
+        .array(
+            z.object({
+                row: z.number().int().positive(),
+                allocations: z.array(z.object({ target: z.string().max(100), amount })).max(1000),
+            }),
+        )
+        .max(1000)
+        .optional(),
 });
-
-function importKey(row: ImportRow) {
-    return JSON.stringify(
-        row.kind === 'charge'
-            ? [row.kind, row.date, row.title, row.category, row.amount]
-            : [row.kind, row.date, row.category, row.amount, row.label || null],
-    );
-}
-
-function findDuplicates(store: Store, userId: string, rows: ImportRow[]) {
-    const existing = new Map<string, string[]>();
-    for (const charge of store.db.select().from(charges).where(eq(charges.userId, userId)).all()) {
-        const key = importKey({ ...charge, row: 0, kind: 'charge' });
-        existing.set(key, [...(existing.get(key) ?? []), charge.id]);
-    }
-    for (const payment of store.db.select().from(payments).where(eq(payments.userId, userId)).all()) {
-        const key = importKey({ ...payment, row: 0, kind: 'payment' });
-        existing.set(key, [...(existing.get(key) ?? []), payment.id]);
-    }
-    const seen = new Map<string, number>();
-    const duplicates: { row: number; marker: string }[] = [];
-    for (const row of rows) {
-        const key = importKey(row);
-        const matches = existing.get(key);
-        if (matches?.length) {
-            const digest = createHash('sha256').update(matches.sort().join(',')).digest('hex');
-            duplicates.push({ row: row.row, marker: `${row.row}:existing:${digest}` });
-        }
-        const previous = seen.get(key);
-        if (previous !== undefined) duplicates.push({ row: row.row, marker: `${row.row}:file:${previous}` });
-        else seen.set(key, row.row);
-    }
-    return duplicates;
-}
 
 function canAllocate(store: Store, userId: string, requested: { chargeId: string; amount: number }[]) {
     const totals = new Map<string, number>();
@@ -132,7 +108,15 @@ function canAllocate(store: Store, userId: string, requested: { chargeId: string
             .where(eq(allocations.chargeId, chargeId))
             .all()
             .reduce((sum, item) => sum + item.amount, 0);
-        if (paid + allocated > charge.amount) return false;
+        const refunded = store.sqlite
+            .prepare(
+                `SELECT COALESCE(SUM(ra.amount), 0) AS amount
+                 FROM refund_applications ra
+                 JOIN charges c ON c.id = ra.charge_id
+                 WHERE ra.charge_id = ? AND c.user_id = ?`,
+            )
+            .get(chargeId, userId) as { amount: number };
+        if (paid + refunded.amount + allocated > charge.amount) return false;
     }
     return true;
 }
@@ -282,6 +266,16 @@ export function createApp(store: Store, secret: string, origin: string) {
         .delete('/api/categories/:id', async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });
             if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            if (
+                store.sqlite
+                    .prepare(
+                        `SELECT 1 FROM refunds r
+                         JOIN categories c ON c.id = r.category_id
+                         WHERE r.category_id = ? AND r.user_id = ? AND c.user_id = ?`,
+                    )
+                    .get(c.req.param('id'), session.user.id, session.user.id)
+            )
+                return c.json({ error: 'Cette catégorie est utilisée par un remboursement' }, 400);
             const result = store.sqlite
                 .prepare('DELETE FROM categories WHERE id = ? AND user_id = ?')
                 .run(c.req.param('id'), session.user.id);
@@ -335,46 +329,23 @@ export function createApp(store: Store, secret: string, origin: string) {
         .post('/api/import', zValidator('json', importInput), async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });
             if (!session) return c.json({ error: 'Non authentifié' }, 401);
-            const { kind, csv, commit, approvedDuplicates } = c.req.valid('json');
-            const parsed = parseImport(kind, csv);
-            if (parsed.errors.length) return c.json({ ...parsed, duplicates: [], imported: false }, 200);
+            const { csv, commit, approvedDuplicates, snapshot, proposals } = c.req.valid('json');
             initializeSettings(store, session.user.id);
             try {
                 const result = store.sqlite.transaction(() => {
-                    const duplicates = findDuplicates(store, session.user.id, parsed.rows);
-                    if (!commit || duplicates.some(item => !approvedDuplicates.includes(item.marker))) {
-                        return { ...parsed, duplicates, imported: false };
-                    }
-                    for (const row of parsed.rows) {
-                        if (row.kind === 'charge') {
-                            const { row: _row, kind: _kind, ...data } = row;
-                            const id = randomUUID();
-                            store.db
-                                .insert(charges)
-                                .values({
-                                    ...data,
-                                    id,
-                                    userId: session.user.id,
-                                    installments: 1,
-                                })
-                                .run();
-                            saveSchedule(store, id, [{ date: data.date, amount: data.amount }]);
-                            const exists = store.sqlite
-                                .prepare('SELECT 1 FROM categories WHERE user_id = ? AND name = ? COLLATE NOCASE')
-                                .get(session.user.id, data.category);
-                            if (!exists)
-                                store.sqlite
-                                    .prepare('INSERT INTO categories VALUES (?, ?, ?, NULL)')
-                                    .run(randomUUID(), session.user.id, data.category);
-                        } else {
-                            const { row: _row, kind: _kind, ...data } = row;
-                            store.db
-                                .insert(payments)
-                                .values({ ...data, id: randomUUID(), userId: session.user.id })
-                                .run();
-                        }
-                    }
-                    return { ...parsed, duplicates, imported: true };
+                    const preview = previewImport(store, session.user.id, csv);
+                    if (
+                        !commit
+                        || preview.errors.length
+                        || snapshot !== preview.snapshot
+                        || !proposals
+                        || preview.duplicates.some(item => !approvedDuplicates.includes(item.marker))
+                    )
+                        return preview;
+                    const errors = validateProposals(preview, proposals);
+                    if (errors.length) return { ...preview, proposals, errors };
+                    commitImport(store, session.user.id, preview, proposals);
+                    return { ...preview, proposals, imported: true };
                 })();
                 return c.json(result);
             } catch {
@@ -390,14 +361,33 @@ export function createApp(store: Store, secret: string, origin: string) {
             const applied = ids.length
                 ? store.db.select().from(allocations).where(inArray(allocations.chargeId, ids)).all()
                 : [];
+            const refunded = store.sqlite
+                .prepare(
+                    `SELECT ra.charge_id AS chargeId, SUM(ra.amount) AS amount
+                     FROM refund_applications ra
+                     JOIN charges c ON c.id = ra.charge_id
+                     WHERE c.user_id = ?
+                     GROUP BY ra.charge_id`,
+                )
+                .all(session.user.id) as { chargeId: string; amount: number }[];
             return c.json(
-                rows.map(row => ({
-                    ...row,
-                    schedule: store.sqlite
-                        .prepare('SELECT date, amount FROM charge_installments WHERE charge_id = ? ORDER BY position')
-                        .all(row.id) as Installment[],
-                    paid: applied.filter(item => item.chargeId === row.id).reduce((sum, item) => sum + item.amount, 0),
-                })),
+                rows.map(row => {
+                    const paid = applied
+                        .filter(item => item.chargeId === row.id)
+                        .reduce((sum, item) => sum + item.amount, 0);
+                    const refundedAmount = refunded.find(item => item.chargeId === row.id)?.amount ?? 0;
+                    return {
+                        ...row,
+                        schedule: store.sqlite
+                            .prepare(
+                                'SELECT date, amount FROM charge_installments WHERE charge_id = ? ORDER BY position',
+                            )
+                            .all(row.id) as Installment[],
+                        paid,
+                        refunded: refundedAmount,
+                        available: Math.max(0, row.amount - paid - refundedAmount),
+                    };
+                }),
             );
         })
         .post('/api/charges', zValidator('json', chargeInput), async c => {
@@ -427,15 +417,98 @@ export function createApp(store: Store, secret: string, origin: string) {
                     .where(eq(allocations.chargeId, charge.id))
                     .all()
                     .reduce((sum, item) => sum + item.amount, 0);
+                const refundData = store.sqlite
+                    .prepare(
+                        `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount
+                         FROM refund_applications WHERE charge_id = ?`,
+                    )
+                    .get(charge.id) as { count: number; amount: number };
                 const { schedule, ...data } = c.req.valid('json');
-                if (data.amount < paid) return false;
+                if (data.amount < paid + refundData.amount) return false;
+                if (data.category !== charge.category && refundData.count > 0) return false;
                 store.db.update(charges).set(data).where(eq(charges.id, charge.id)).run();
                 saveSchedule(store, charge.id, schedule ?? legacySchedule(data));
                 return true;
             })();
             if (!result)
-                return c.json({ error: 'Charge introuvable ou montant inférieur aux paiements affectés' }, 400);
+                return c.json(
+                    { error: 'Charge introuvable, montant inférieur aux sommes affectées ou catégorie déjà remboursée' },
+                    400,
+                );
             return c.json({ success: true });
+        })
+        .delete('/api/charges/:id', async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const result = store.sqlite.transaction(() => {
+                const charge = store.db
+                    .select()
+                    .from(charges)
+                    .where(and(eq(charges.id, c.req.param('id')), eq(charges.userId, session.user.id)))
+                    .get();
+                if (!charge) return 'missing' as const;
+                const paid = store.sqlite
+                    .prepare('SELECT 1 FROM allocations WHERE charge_id = ? LIMIT 1')
+                    .get(charge.id);
+                const refunded = store.sqlite
+                    .prepare('SELECT 1 FROM refund_applications WHERE charge_id = ? LIMIT 1')
+                    .get(charge.id);
+                if (paid || refunded) return 'in-use' as const;
+                store.db.delete(charges).where(eq(charges.id, charge.id)).run();
+                return 'deleted' as const;
+            })();
+            if (result === 'missing') return c.json({ error: 'Charge introuvable' }, 404);
+            if (result === 'in-use')
+                return c.json({ error: 'Cette charge comporte des paiements ou remboursements affectés' }, 400);
+            return c.json({ success: true });
+        })
+        .get('/api/refunds', async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const rows = store.sqlite
+                .prepare(
+                    `SELECT r.id, r.user_id AS userId, r.date, r.title, r.category_id AS categoryId,
+                            c.name AS category, r.amount,
+                            COALESCE(SUM(CASE WHEN target.id IS NOT NULL THEN ra.amount ELSE 0 END), 0) AS appliedAmount
+                     FROM refunds r
+                     JOIN categories c ON c.id = r.category_id AND c.user_id = r.user_id
+                     LEFT JOIN refund_applications ra ON ra.refund_id = r.id
+                     LEFT JOIN charges target ON target.id = ra.charge_id AND target.user_id = r.user_id
+                     WHERE r.user_id = ?
+                     GROUP BY r.id
+                     ORDER BY r.date, r.id`,
+                )
+                .all(session.user.id) as {
+                id: string;
+                userId: string;
+                date: string;
+                title: string;
+                categoryId: string;
+                category: string;
+                amount: number;
+                appliedAmount: number;
+            }[];
+            const applications = store.sqlite
+                .prepare(
+                    `SELECT ra.id, ra.refund_id AS refundId, ra.charge_id AS chargeId, ra.amount
+                     FROM refund_applications ra
+                     JOIN refunds r ON r.id = ra.refund_id
+                     JOIN charges c ON c.id = ra.charge_id AND c.user_id = r.user_id
+                     WHERE r.user_id = ?
+                     ORDER BY ra.id`,
+                )
+                .all(session.user.id) as { id: string; refundId: string; chargeId: string; amount: number }[];
+            const byRefund = new Map<string, typeof applications>();
+            for (const application of applications) {
+                byRefund.set(application.refundId, [...(byRefund.get(application.refundId) ?? []), application]);
+            }
+            return c.json(
+                rows.map(refund => ({
+                    ...refund,
+                    unappliedAmount: refund.amount - refund.appliedAmount,
+                    applications: byRefund.get(refund.id) ?? [],
+                })),
+            );
         })
         .get('/api/payments', async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });

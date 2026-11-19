@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { addMonths, makeSchedule, remainingInstallments, splitCents } from './schedule';
+import { addMonths, makeSchedule, remainingChargeAmount, remainingInstallments, splitCents } from './schedule';
 
 describe('échéancier', () => {
     it('répartit les centimes sans perte', () => {
         expect(splitCents(1000, 3)).toEqual([334, 333, 333]);
+    });
+    it('déduit séparément paiements et remboursements du solde restant', () => {
+        expect(remainingChargeAmount(1000, 300, 200)).toBe(500);
+        expect(remainingChargeAmount(1000, 800, 400)).toBe(0);
     });
     it('conserve le jour demandé et borne la fin du mois', () => {
         expect(addMonths('2024-01-31', 1)).toBe('2024-02-29');

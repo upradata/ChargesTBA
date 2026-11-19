@@ -26,6 +26,10 @@ export function addMonths(iso: string, months: number): string {
 export type ScheduleRule = { monthOffset: number; day: number; weight: number };
 export type Installment = { date: string; amount: number };
 
+export function remainingChargeAmount(amount: number, paid: number, refunded: number): number {
+    return Math.max(0, amount - paid - refunded);
+}
+
 export function displayDate(date: string): string {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
     return match ? `${match[3]}/${match[2]}/${match[1]}` : date;
