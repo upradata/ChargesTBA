@@ -10,7 +10,7 @@ The product is an early prototype, not a hosted production financial service. Tr
 
 ## Visual direction
 
-Aim for a calm, precise, premium-minimal SaaS interface with fintech-grade clarity. Favor neutral surfaces, subtle dividers, deliberate alignment, legible financial data, and a restrained accent. Density should help users compare records without making forms feel cramped. Avoid generic dashboard decoration, unnecessary gradients, colorful cards, excessive shadows/radii, and motion without functional purpose.
+Aim for a calm, precise, premium-minimal SaaS interface with fintech-grade clarity. Use a neutral, graphite-forward palette, subtle dividers, deliberate alignment, and legible financial data. Density should help users compare records without making forms feel cramped. Reserve color for meaningful states such as errors and status, and never rely on color alone. Avoid generic dashboard decoration, unnecessary gradients, colorful cards, excessive shadows/radii, and motion without functional purpose.
 
 This is a product direction, not a claim that the current screens have passed visual QA. Record observations and decisions in `.github/design-knowledge/` with their evidence and status.
 
@@ -18,7 +18,7 @@ This is a product direction, not a claim that the current screens have passed vi
 
 - Design tokens: `src/styles/tokens.css`; `src/styles.css` imports Tailwind and the token sheet, defines the dark variant and base styles.
 - Shared UI primitives: `src/components/ui/`; the app currently uses its shadcn-derived components. Do not add Proper UI or another component system without an explicit product decision.
-- Application shell, route composition, and financial views: `src/App.tsx`; shared page headings: `src/components/PageHeading.tsx`.
+- Application shell, route composition, and financial views: `src/App.tsx`; grouped navigation: `src/components/AppNavigation.tsx`; shared page headings: `src/components/PageHeading.tsx`.
 - CSV preview/import UI: `src/ImportView.tsx`; parser and import invariants are in `server/import-csv.ts` and `server/app.ts`.
 - Category and reusable schedule settings: `src/SettingsView.tsx`.
 - Schedule arithmetic: `shared/schedule.ts`.
@@ -31,7 +31,7 @@ The implementation declares Inter before system sans-serif fallbacks in `src/sty
 
 Use semantic utilities backed by CSS variables: background, foreground, card, popover, primary, secondary, muted, accent, destructive, border, input, ring, and radius scales. Change the central tokens rather than scattering new color literals. Light/dark values are both defined in `src/styles/tokens.css`; any token change must preserve contrast and be checked in both themes.
 
-The current primary accent is teal-green, based on the existing token values. Treat that as the current implementation, not a separately approved brand decision. Do not introduce parallel token files or hard-code a new palette in a component.
+The primary action and interactive accent use a restrained neutral palette in both themes. Error and status colors remain semantic. This is the current implementation, not a separately approved brand decision. Do not introduce parallel token files or hard-code a new palette in a component.
 
 ### Typography and financial data
 
@@ -40,6 +40,8 @@ Use the existing sans-serif stack and size/weight conventions unless a deliberat
 ### Surfaces, spacing, and icons
 
 Use existing shared primitives and their current variants. Maintain consistent page padding, gaps, control sizes, border ownership, and radii. Prefer borders over shadows for persistent content; reserve elevation for floating UI. Keep Lucide icons consistent in size and pair icon-only controls with accessible names.
+
+Enabled shared buttons show the standard hand cursor on hover, including icon-only controls.
 
 ## Information architecture and workflows
 
@@ -55,7 +57,9 @@ Do not invent roadmap behaviors such as reassignment history, demo mode, charge-
 
 ## Responsive behavior
 
-The app has a mobile menu and a desktop sidebar, a fluid content area capped at a readable maximum width, and horizontally scrollable table containers where needed. Preserve reachable navigation and table content at narrow widths. Test the actual changed screen at relevant phone, tablet, and desktop sizes; source classes alone do not prove the rendered layout is correct.
+On desktop, navigation shares the shell background and the sticky header and page content sit inside one inset card. On mobile, content stays edge-to-edge and the navigation drawer uses an opaque surface. Both navigation transitions respect reduced-motion preferences.
+
+The app has a mobile menu and a grouped desktop sidebar that can collapse to an icon rail for the current session, a fluid content area capped at a readable maximum width, and horizontally scrollable table containers where needed. Preserve reachable navigation and table content at narrow widths. Test the actual changed screen at relevant phone, tablet, and desktop sizes; source classes alone do not prove the rendered layout is correct.
 
 ## States and interactions
 
@@ -76,3 +80,4 @@ Consult `.github/design-knowledge/README.md` and relevant references/patterns be
 - 2026-11-15: After the UI refresh, login was visually inspected in light mode at a 1440×1000 desktop viewport and dark mode at a 390×844 mobile viewport; signup was also inspected at desktop size. Login/signup fields and labels were present, the document width matched the 1440px viewport, and no console warnings/errors were observed.
 - The authenticated shell, dashboard, charge/payment tables and forms, settings, and import workflow were not visually inspected because no test account was created. Their implementation is not thereby visually verified or product-approved.
 - The browser reported a missing `/favicon.ico` (404), unrelated to the token move; it was not changed in this task.
+- 2026-11-18: Headless Chrome DOM and interaction checks used an isolated in-memory database with synthetic records. At 390, 768, 1440, and 1920 CSS pixels in both themes, the dashboard had no page-level horizontal overflow after layout settled; metric-label contrast was at least 4.5:1. The desktop sidebar was collapsed by keyboard and expanded by pointer; the mobile menu was opened, closed with Escape, and closed by route selection. The mobile table amount was reachable by scrolling. These automated checks are not a visual inspection or a complete accessibility audit.

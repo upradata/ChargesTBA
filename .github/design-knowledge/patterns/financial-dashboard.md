@@ -9,7 +9,7 @@ Help a user understand charge progress, recorded payments, remaining amounts, ov
 - Local implementation: `Overview` in `v3/src/App.tsx`.
 - Product goals and terminology: `v3/PROJECT-PLAN.md`.
 - Domain references: [FinTrack](../references/products/fintrack.md) (README feature descriptions only) and [shadcn-fintech](../references/products/shadcn-fintech.md) (live dashboard screenshots, content, and selected source inspected).
-- External product comparison: [shadcn-fintech](../references/products/shadcn-fintech.md), including live-page content extraction and source inspection; rendered visuals were not inspected.
+- External product comparison: [shadcn-fintech](../references/products/shadcn-fintech.md), including live-page content, source, and desktop/mobile screenshots.
 
 ## Design principles
 
@@ -22,6 +22,7 @@ Help a user understand charge progress, recorded payments, remaining amounts, ov
 ## Layout
 
 - Current implementation presents four named metrics (account balance, outstanding charges, unallocated credit, overdue installments), a balance-over-time chart, the five nearest remaining installments, and five recent movements.
+- Metrics use a responsive grid; the chart and upcoming installments share a twelve-column layout at wide widths and stack on smaller screens.
 - The ledger route presents dated charge/payment movements and a running balance in a separate table view.
 - The overdue amount remains informational and is explicitly tied to saved installments.
 - External source comparison: shadcn-fintech’s dashboard source assembles an overview chart, account cards, quick transfer/spending, money movement, health score, and recent transactions in a 12-column grid. The overview compares current/prior-year monthly values with a range picker; custom widget order is saved in localStorage. These are source-observed template features, not ChargesTBA requirements.
@@ -49,7 +50,9 @@ Help a user understand charge progress, recorded payments, remaining amounts, ov
 ## Evidence
 
 - Source inspected 2026-11-15: `v3/src/App.tsx` and `v3/src/components/PageHeading.tsx`; product requirements in `v3/PROJECT-PLAN.md` and `v3/README.md`.
-- Current UI validation: Oxfmt, v3 typecheck, 16 tests, and build passed. The dashboard and ledger were not visually inspected because no test account was created.
+- Earlier UI validation: Oxfmt, v3 typecheck, 16 tests, and build passed. The dashboard and ledger were not visually inspected because no test account was created.
+- 2026-11-18: An isolated headless Chrome session used synthetic charges and payments to check empty/populated dashboard rendering, page overflow and metric-label contrast in light and dark themes at 390, 768, 1440, and 1920 CSS pixels. The amount column remained reachable by scrolling at 390 pixels. No screenshot was visually inspected.
+- 2026-11-18: Updated UI files passed Oxfmt and Oxlint; v3 typecheck, 21 tests, and an isolated-output production build passed.
 
 ## Validation
 
@@ -57,12 +60,12 @@ Help a user understand charge progress, recorded payments, remaining amounts, ov
 - Evaluated: yes — terminology and product goals reviewed.
 - Adapted: yes — financial summary now separates the four key measures and pairs the chart with upcoming installments and recent activity.
 - Implemented: yes — evidenced by current source.
-- Verified: no — dashboard, ledger, chart, and financial data states were not browser-verified.
+- Verified: partial — the dashboard checks above passed; visual appearance, chart interaction, ledger, and other financial states remain unverified.
 - Approved: no.
 
 ## External reference comparison — shadcn-fintech
 
 - **Observed — source, live-page content, and screenshots, 2026-11-15:** The external overview and customization details are documented in [the product reference](../references/products/shadcn-fintech.md). [Desktop](../screenshots/products/shadcn-fintech-dashboard-1440x1000.png) and [mobile](../screenshots/products/shadcn-fintech-dashboard-mobile-390x844.png) captures were visually inspected. The mobile screenshot shows the widgets stacked; the desktop capture shows a chart/account-card top row and three lower widget columns.
 - **Evaluated:** Period comparison paired with labels/totals and an adjustable date range may inform a future meaningful ChargesTBA comparison. The broad wallet/crypto/investment dashboard and reorderable widget grid are likely excessive for the current condominium-bookkeeping scope.
-- **Adaptation status:** No changes to the ChargesTBA dashboard were made from this reference. Existing local metrics, terminology, and visual direction remain authoritative.
+- **Adapted and implemented:** The compact bordered dashboard grid and responsive chart/summary composition are adapted to the existing ChargesTBA metrics and terminology; demo widgets and customization are excluded.
 - **Evidence limit:** Visual appearance was inspected only in the two saved viewport captures. Date-range and widget-reordering interactions, other viewports, accessibility, and live-data behavior were not verified.
