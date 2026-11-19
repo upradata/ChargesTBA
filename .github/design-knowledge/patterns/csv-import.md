@@ -21,6 +21,7 @@ Allow a signed-in user to import charge/payment records while reviewing parsing 
 ## Layout
 
 - Current UI presents a three-step progress indicator, file-type and file selection, an “Analyser le fichier” action, inline error/status alerts, an error/duplicate summary, a row preview table, and a final confirmation action.
+- The file selection card shows copyable comma- and semicolon-separated examples for the selected import type, including the header row and how to quote decimal commas.
 - The confirmation button is disabled for invalid previews or no accepted rows; its label notes when duplicates are included.
 
 ## Interactions and states
