@@ -143,9 +143,9 @@ const paddings: Record<string, string> = {
 };
 
 const radii: Record<string, string> = {
-    sm: 'rounded-md',
-    md: 'rounded-lg',
-    lg: 'rounded-xl',
+    sm: 'rounded-sm',
+    md: 'rounded-md',
+    lg: 'rounded-lg',
 };
 
 export function Card({
@@ -161,7 +161,7 @@ export function Card({
 }) {
     return (
         <ShadcnCard
-            className={`${paddings[p] ?? 'p-4'} ${radii[radius] ?? 'rounded-xl'} shadow-sm ${className ?? ''}`}
+            className={`${paddings[p] ?? 'p-4'} ${radii[radius] ?? 'rounded-lg'} ${className ?? ''}`}
             {...props}
         />
     );

@@ -14,6 +14,10 @@
         font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     }
 
+    ::selection {
+        @apply bg-primary text-primary-foreground;
+    }
+
     button,
     input,
     select {
