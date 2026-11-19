@@ -26,7 +26,7 @@ describe('API locale', () => {
                 .run('p', 'u', '2024-02-01', 'Virement', 200);
             old.sqlite.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?)').run('a', 'p', 'c', 200);
             old.sqlite.exec(
-                'DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; ALTER TABLE payments DROP COLUMN label; PRAGMA user_version = 1',
+                'DROP TABLE refund_applications; DROP TABLE refunds; DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; ALTER TABLE payments DROP COLUMN label; PRAGMA user_version = 1',
             );
             old.sqlite.close();
             const migrated = openDatabase(path);
@@ -42,7 +42,7 @@ describe('API locale', () => {
             expect(migrated.sqlite.prepare('SELECT amount FROM allocations WHERE id = ?').get('a')).toEqual({
                 amount: 200,
             });
-            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(3);
+            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(4);
             migrated.sqlite.close();
         } finally {
             rmSync(directory, { recursive: true, force: true });
@@ -60,6 +60,8 @@ describe('API locale', () => {
                     INSERT INTO charges VALUES ('c', 'u', 'Charge', 'Test', '2024-01-31', 1000, 2);
                     INSERT INTO payments (id, user_id, date, category, amount, label)
                         VALUES ('p', 'u', '2024-02-01', 'Virement', 200, 'Libellé');
+                    DROP TABLE refund_applications;
+                    DROP TABLE refunds;
                 `);
                 if (variant === 'imports') {
                     old.sqlite.exec(
@@ -72,7 +74,7 @@ describe('API locale', () => {
                 old.sqlite.pragma('user_version = 2');
                 old.sqlite.close();
                 const migrated = openDatabase(path);
-                expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(3);
+                expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(4);
                 expect(migrated.sqlite.prepare('SELECT label FROM payments').get()).toEqual({
                     label: variant === 'imports' ? 'Libellé' : null,
                 });

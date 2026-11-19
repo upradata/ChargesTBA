@@ -66,7 +66,7 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
         PRAGMA user_version = 1;
       `);
         })();
-    } else if (version !== 1 && version !== 2 && version !== 3) {
+    } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
         throw new Error(`Version de base de données non prise en charge : ${String(version)}`);
     }
     if (version === 0 || version === 1 || version === 2) {
@@ -111,6 +111,28 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
                 }
             }
             sqlite.pragma('user_version = 3');
+        })();
+    }
+    if (version !== 4) {
+        sqlite.transaction(() => {
+            sqlite.exec(`
+                CREATE TABLE refunds (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+                    date TEXT NOT NULL, title TEXT NOT NULL,
+                    category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+                    amount INTEGER NOT NULL CHECK(typeof(amount) = 'integer' AND amount > 0)
+                );
+                CREATE TABLE refund_applications (
+                    id TEXT PRIMARY KEY, refund_id TEXT NOT NULL REFERENCES refunds(id) ON DELETE CASCADE,
+                    charge_id TEXT NOT NULL REFERENCES charges(id) ON DELETE CASCADE,
+                    amount INTEGER NOT NULL CHECK(typeof(amount) = 'integer' AND amount > 0)
+                );
+                CREATE INDEX refunds_user ON refunds(user_id);
+                CREATE INDEX refunds_category ON refunds(category_id);
+                CREATE INDEX refund_applications_refund ON refund_applications(refund_id);
+                CREATE INDEX refund_applications_charge ON refund_applications(charge_id);
+                PRAGMA user_version = 4;
+            `);
         })();
     }
     return { sqlite, db: drizzle(sqlite) };
