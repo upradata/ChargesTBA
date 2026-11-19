@@ -8,16 +8,14 @@ import {
     CircleDollarSign,
     Clock3,
     CreditCard,
-    Home,
     List,
     LogOut,
     Menu,
     Moon,
+    PanelLeft,
     Plus,
     Receipt,
-    Settings,
     Sun,
-    Upload,
     Wallet,
     X,
     type LucideIcon,
@@ -43,6 +41,7 @@ import {
     remainingInstallments,
 } from '../shared/schedule';
 
+import { AppNavigation, navigationGroups } from './components/AppNavigation';
 import { PageHeading } from './components/PageHeading';
 import {
     Alert,
@@ -69,6 +68,7 @@ const money = (cents: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 const ImportView = lazy(() => import('./ImportView').then(module => ({ default: module.ImportView })));
 const SettingsView = lazy(() => import('./SettingsView').then(module => ({ default: module.SettingsView })));
+const desktopNavigationQuery = '(min-width: 48rem)';
 
 function FrenchDateInput({
     label,
@@ -177,10 +177,10 @@ function Login() {
     }
     return (
         <main className="bg-background grid min-h-screen place-items-center px-4 py-8 sm:px-6">
-            <div className="bg-card grid w-full max-w-5xl overflow-hidden rounded-2xl border shadow-sm lg:grid-cols-[1fr_0.9fr]">
+            <div className="bg-card grid w-full max-w-5xl overflow-hidden rounded-xl border lg:grid-cols-[1fr_0.9fr]">
                 <section className="bg-muted/50 hidden flex-col justify-between border-e p-10 lg:flex">
                     <div className="flex items-center gap-3">
-                        <span className="bg-primary text-primary-foreground grid size-11 place-items-center rounded-xl">
+                        <span className="bg-primary text-primary-foreground grid size-11 place-items-center rounded-lg">
                             <Building2 className="size-5" aria-hidden="true" />
                         </span>
                         <div>
@@ -189,10 +189,10 @@ function Login() {
                         </div>
                     </div>
                     <div className="max-w-md space-y-5">
-                        <p className="text-primary text-xs font-semibold tracking-wider uppercase">
+                        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                             Vos comptes, en clair
                         </p>
-                        <h1 className="text-4xl leading-tight font-semibold tracking-tight">
+                        <h1 className="text-3xl leading-tight font-semibold tracking-tight">
                             Une vue simple sur les charges et les paiements.
                         </h1>
                         <p className="text-muted-foreground leading-7">
@@ -216,7 +216,7 @@ function Login() {
                 <section className="flex items-center justify-center p-6 sm:p-10">
                     <div className="w-full max-w-sm">
                         <div className="mb-8 flex items-center gap-3 lg:hidden">
-                            <span className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-xl">
+                            <span className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-lg">
                                 <Building2 className="size-5" aria-hidden="true" />
                             </span>
                             <div>
@@ -225,7 +225,7 @@ function Login() {
                             </div>
                         </div>
                         <div className="mb-6 space-y-2">
-                            <p className="text-primary text-xs font-semibold tracking-wider uppercase">
+                            <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
                                 Espace personnel
                             </p>
                             <h2 className="text-2xl font-semibold tracking-tight">
@@ -975,15 +975,17 @@ function MetricCard({
     icon: LucideIcon;
 }) {
     return (
-        <Card p="lg" className="gap-4">
+        <Card p="md" className="min-w-0 gap-4">
             <div className="flex items-center justify-between gap-3">
-                <p className="text-muted-foreground text-sm font-medium">{label}</p>
-                <span className="bg-muted text-muted-foreground grid size-9 shrink-0 place-items-center rounded-lg">
+                <p className="text-muted-foreground text-xs font-medium">{label}</p>
+                <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-md">
                     <Icon className="size-4" aria-hidden="true" />
                 </span>
             </div>
             <div>
-                <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums">{money(value)}</p>
+                <p className="font-mono text-xl font-semibold tracking-tight break-words tabular-nums sm:text-2xl">
+                    {money(value)}
+                </p>
                 <p className="text-muted-foreground mt-1 text-xs">{detail}</p>
             </div>
         </Card>
@@ -1310,19 +1312,36 @@ export function App() {
         document.documentElement.classList.contains('dark') ? 'dark' : 'light',
     );
     const [opened, setOpened] = useState(false);
+    const [desktopNavigation, setDesktopNavigation] = useState(() => matchMedia(desktopNavigationQuery).matches);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const mobileNavigationTrigger = useRef<HTMLButtonElement>(null);
     const client = useQueryClient();
     useEffect(() => {
         document.documentElement.classList.toggle('dark', colorScheme === 'dark');
         window.localStorage.setItem('charges-tba-color-scheme', colorScheme);
     }, [colorScheme]);
     useEffect(() => {
-        if (!opened) return;
+        const viewport = matchMedia(desktopNavigationQuery);
+        function syncNavigation() {
+            setDesktopNavigation(viewport.matches);
+            if (viewport.matches) setOpened(false);
+        }
+        viewport.addEventListener('change', syncNavigation);
+        syncNavigation();
+        return () => viewport.removeEventListener('change', syncNavigation);
+    }, []);
+    function closeMobileNavigation() {
+        mobileNavigationTrigger.current?.focus();
+        setOpened(false);
+    }
+    useEffect(() => {
+        if (!opened || desktopNavigation) return;
         function closeOnEscape(event: KeyboardEvent) {
-            if (event.key === 'Escape') setOpened(false);
+            if (event.key === 'Escape') closeMobileNavigation();
         }
         window.addEventListener('keydown', closeOnEscape);
         return () => window.removeEventListener('keydown', closeOnEscape);
-    }, [opened]);
+    }, [opened, desktopNavigation]);
     const charges = useQuery({
         queryKey: ['charges', session.data?.user.id],
         queryFn: getCharges,
@@ -1370,139 +1389,128 @@ export function App() {
             </main>
         );
     if (!session.data) return <Login />;
-    const items = [
-        { path: '/', label: 'Tableau de bord', icon: Home },
-        { path: '/charges', label: 'Charges', icon: Receipt },
-        { path: '/payments', label: 'Paiements', icon: CreditCard },
-        { path: '/ledger', label: 'Mouvements', icon: List },
-        { path: '/settings', label: 'Paramètres', icon: Settings },
-        { path: '/import', label: 'Importer', icon: Upload },
-    ];
-    const currentItem = items.find(item => item.path === location.pathname);
+    const currentItem = navigationGroups.flatMap(group => group.items).find(item => item.path === location.pathname);
     return (
-        <div className="bg-background min-h-screen md:grid md:grid-cols-[16rem_minmax(0,1fr)]">
-            <header className="bg-card/95 sticky top-0 z-40 flex min-h-16 items-center justify-between border-b px-4 backdrop-blur md:col-start-2 md:row-start-1 md:px-8">
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="subtle"
-                        size="icon"
-                        className="md:hidden"
-                        aria-label={opened ? 'Fermer le menu' : 'Ouvrir le menu'}
-                        aria-controls="primary-navigation"
-                        aria-expanded={opened}
-                        onClick={() => setOpened(value => !value)}>
-                        {opened ? <X /> : <Menu />}
-                    </Button>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground hidden sm:inline">ChargesTBA</span>
-                        <span className="text-muted-foreground hidden sm:inline" aria-hidden="true">
-                            /
-                        </span>
-                        <span className="font-medium">{currentItem?.label ?? 'Tableau de bord'}</span>
-                    </div>
-                </div>
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="subtle"
-                        size="icon"
-                        aria-label={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-                        title={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-                        onClick={() => setColorScheme(value => (value === 'dark' ? 'light' : 'dark'))}>
-                        {colorScheme === 'dark' ? <Sun /> : <Moon />}
-                    </Button>
-                    <form onSubmit={signOut}>
-                        <Button type="submit" variant="subtle" className="gap-2">
-                            <LogOut aria-hidden="true" /> <span className="hidden sm:inline">Déconnexion</span>
+        <div
+            className={`bg-muted/40 min-h-dvh md:grid md:gap-2 md:py-2 md:pe-2 motion-safe:md:transition-[grid-template-columns] motion-safe:md:duration-200 ${sidebarCollapsed ? 'md:grid-cols-[4.5rem_minmax(0,1fr)]' : 'md:grid-cols-[16rem_minmax(0,1fr)]'}`}>
+            <div
+                aria-hidden="true"
+                className={`bg-foreground/30 fixed inset-0 z-30 backdrop-blur-sm motion-safe:transition-opacity motion-safe:duration-200 md:hidden ${opened ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+                onClick={closeMobileNavigation}
+            />
+            <AppNavigation
+                pathname={location.pathname}
+                mobileOpen={opened}
+                desktop={desktopNavigation}
+                collapsed={sidebarCollapsed}
+                onNavigate={() => {
+                    if (opened) closeMobileNavigation();
+                }}
+            />
+            <div className="bg-card md:border-border/60 min-w-0 md:col-start-2 md:row-start-1 md:rounded-xl md:border">
+                <header className="bg-card border-border/50 sticky top-0 z-40 flex min-h-16 items-center justify-between border-b px-4 md:top-2 md:rounded-t-xl md:px-6">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="subtle"
+                            size="icon"
+                            className="md:hidden"
+                            ref={mobileNavigationTrigger}
+                            aria-label={opened ? 'Fermer le menu' : 'Ouvrir le menu'}
+                            aria-controls="primary-navigation"
+                            aria-expanded={opened}
+                            onClick={() => (opened ? closeMobileNavigation() : setOpened(true))}>
+                            {opened ? <X /> : <Menu />}
                         </Button>
-                    </form>
-                </div>
-            </header>
-            {opened && (
-                <button
-                    type="button"
-                    aria-label="Fermer le menu"
-                    className="bg-foreground/30 fixed inset-0 z-30 backdrop-blur-sm md:hidden"
-                    onClick={() => setOpened(false)}
-                />
-            )}
-            <aside
-                id="primary-navigation"
-                className={`${opened ? 'flex' : 'hidden'} bg-card fixed start-0 top-16 z-40 h-[calc(100dvh-4rem)] w-72 flex-col border-e p-4 shadow-xl md:sticky md:top-0 md:row-span-2 md:row-start-1 md:flex md:h-screen md:w-auto md:shadow-none`}>
-                <div className="mb-10 flex items-center gap-3 px-2 pt-2">
-                    <span className="bg-primary text-primary-foreground grid size-10 place-items-center rounded-xl">
-                        <Building2 className="size-5" aria-hidden="true" />
-                    </span>
-                    <div>
-                        <p className="font-semibold tracking-tight">ChargesTBA</p>
-                        <p className="text-muted-foreground text-xs">Gestion de copropriété</p>
-                    </div>
-                </div>
-                <nav aria-label="Navigation principale" className="grid gap-1">
-                    <p className="text-muted-foreground mb-2 px-3 text-xs font-semibold tracking-wider uppercase">
-                        Espace de travail
-                    </p>
-                    {items.map(({ path, label, icon: Icon }) => {
-                        const active = location.pathname === path;
-                        return (
-                            <Link
-                                key={path}
-                                to={path}
-                                onClick={() => setOpened(false)}
-                                aria-current={active ? 'page' : undefined}
-                                className={`focus-visible:ring-ring flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none ${active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-                                <Icon className="size-4" aria-hidden="true" />
-                                {label}
-                            </Link>
-                        );
-                    })}
-                </nav>
-                <div className="mt-auto border-t px-2 pt-4">
-                    <div className="bg-muted/60 rounded-lg p-3">
-                        <p className="text-xs font-medium">Prototype local</p>
-                        <p className="text-muted-foreground mt-1 text-xs leading-5">
-                            Vos données sont conservées dans cette installation.
-                        </p>
-                    </div>
-                </div>
-            </aside>
-            <main className="min-w-0 p-4 sm:p-6 md:col-start-2 md:row-start-2 md:px-8 md:py-7 lg:px-10">
-                <div className="mx-auto w-full max-w-7xl">
-                    {charges.isError || payments.isError || refunds.isError || settings.isError ? (
-                        <Alert color="red" role="alert">
-                            Impossible de charger les données.
-                        </Alert>
-                    ) : !charges.data || !payments.data || !refunds.data || !settings.data ? (
-                        <div className="text-muted-foreground flex items-center gap-3 py-12 text-sm" role="status">
-                            <span className="border-primary size-5 animate-spin rounded-full border-2 border-e-transparent" />
-                            Chargement de vos données…
+                        <Button
+                            variant="subtle"
+                            size="icon"
+                            className="hidden md:inline-flex"
+                            aria-label={sidebarCollapsed ? 'Développer la navigation' : 'Réduire la navigation'}
+                            aria-controls="primary-navigation"
+                            aria-expanded={!sidebarCollapsed}
+                            onClick={() => setSidebarCollapsed(value => !value)}>
+                            <PanelLeft aria-hidden="true" />
+                        </Button>
+                        <span aria-hidden="true" className="bg-border/70 h-4 w-px shrink-0" />
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground hidden sm:inline">ChargesTBA</span>
+                            <span className="text-muted-foreground hidden sm:inline" aria-hidden="true">
+                                /
+                            </span>
+                            <span className="font-medium">{currentItem?.label ?? 'Tableau de bord'}</span>
                         </div>
-                    ) : (
-                        <Suspense fallback={<Text>Chargement…</Text>}>
-                            <Routes>
-                                <Route
-                                    path="/"
-                                    element={<Overview charges={charges.data} payments={payments.data} refunds={refunds.data} />}
-                                />
-                                <Route
-                                    path="/charges"
-                                    element={<ChargesView charges={charges.data} settings={settings.data} />}
-                                />
-                                <Route path="/settings" element={<SettingsView settings={settings.data} />} />
-                                <Route
-                                    path="/payments"
-                                    element={<PaymentsView charges={charges.data} payments={payments.data} />}
-                                />
-                                <Route
-                                    path="/ledger"
-                                    element={<Overview charges={charges.data} payments={payments.data} refunds={refunds.data} ledger />}
-                                />
-                                <Route path="/import" element={<ImportView categories={settings.data.categories} />} />
-                                <Route path="*" element={<Navigate to="/" replace />} />
-                            </Routes>
-                        </Suspense>
-                    )}
-                </div>
-            </main>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Button
+                            variant="subtle"
+                            size="icon"
+                            aria-label={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                            title={colorScheme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                            onClick={() => setColorScheme(value => (value === 'dark' ? 'light' : 'dark'))}>
+                            {colorScheme === 'dark' ? <Sun /> : <Moon />}
+                        </Button>
+                        <form onSubmit={signOut}>
+                            <Button type="submit" variant="subtle" className="gap-2" aria-label="Déconnexion">
+                                <LogOut aria-hidden="true" /> <span className="hidden sm:inline">Déconnexion</span>
+                            </Button>
+                        </form>
+                    </div>
+                </header>
+                <main className="min-w-0 p-4 sm:p-6 md:px-6 md:py-7 lg:px-8">
+                    <div className="mx-auto w-full max-w-7xl">
+                        {charges.isError || payments.isError || refunds.isError || settings.isError ? (
+                            <Alert color="red" role="alert">
+                                Impossible de charger les données.
+                            </Alert>
+                        ) : !charges.data || !payments.data || !refunds.data || !settings.data ? (
+                            <div className="text-muted-foreground flex items-center gap-3 py-12 text-sm" role="status">
+                                <span className="border-primary size-5 animate-spin rounded-full border-2 border-e-transparent" />
+                                Chargement de vos données…
+                            </div>
+                        ) : (
+                            <Suspense fallback={<Text>Chargement…</Text>}>
+                                <Routes>
+                                    <Route
+                                        path="/"
+                                        element={
+                                            <Overview
+                                                charges={charges.data}
+                                                payments={payments.data}
+                                                refunds={refunds.data}
+                                            />
+                                        }
+                                    />
+                                    <Route
+                                        path="/charges"
+                                        element={<ChargesView charges={charges.data} settings={settings.data} />}
+                                    />
+                                    <Route path="/settings" element={<SettingsView settings={settings.data} />} />
+                                    <Route
+                                        path="/payments"
+                                        element={<PaymentsView charges={charges.data} payments={payments.data} />}
+                                    />
+                                    <Route
+                                        path="/ledger"
+                                        element={
+                                            <Overview
+                                                charges={charges.data}
+                                                payments={payments.data}
+                                                refunds={refunds.data}
+                                                ledger
+                                            />
+                                        }
+                                    />
+                                    <Route
+                                        path="/import"
+                                        element={<ImportView categories={settings.data.categories} />}
+                                    />
+                                    <Route path="*" element={<Navigate to="/" replace />} />
+                                </Routes>
+                            </Suspense>
+                        )}
+                    </div>
+                </main>
+            </div>
         </div>
     );
 }
