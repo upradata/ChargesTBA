@@ -35,7 +35,13 @@ import {
 } from 'recharts';
 
 import type { AppType } from '../server/app';
-import { addMonths, displayDate, makeSchedule, remainingInstallments } from '../shared/schedule';
+import {
+    addMonths,
+    displayDate,
+    makeSchedule,
+    remainingChargeAmount,
+    remainingInstallments,
+} from '../shared/schedule';
 
 import { PageHeading } from './components/PageHeading';
 import {
@@ -135,6 +141,11 @@ async function getPayments() {
     if (!res.ok) throw new Error('Impossible de charger les paiements.');
     return res.json();
 }
+async function getRefunds() {
+    const res = await api.api.refunds.$get();
+    if (!res.ok) throw new Error('Impossible de charger les remboursements.');
+    return res.json();
+}
 async function getSettings() {
     const res = await api.api.settings.$get();
     if (!res.ok) throw new Error('Impossible de charger les paramètres.');
@@ -142,6 +153,7 @@ async function getSettings() {
 }
 type Charge = Awaited<ReturnType<typeof getCharges>>[number];
 type Payment = Awaited<ReturnType<typeof getPayments>>[number];
+type Refund = Awaited<ReturnType<typeof getRefunds>>[number];
 export type Settings = Awaited<ReturnType<typeof getSettings>>;
 
 function Login() {
@@ -541,8 +553,9 @@ function ChargesView({ charges, settings }: { charges: Charge[]; settings: Setti
                             </Table.Thead>
                             <Table.Tbody>
                                 {charges.map(charge => {
-                                    const remaining = charge.amount - charge.paid;
-                                    const progress = (charge.paid / charge.amount) * 100;
+                                    const settled = charge.paid + charge.refunded;
+                                    const remaining = remainingChargeAmount(charge.amount, charge.paid, charge.refunded);
+                                    const progress = (settled / charge.amount) * 100;
                                     return (
                                         <Table.Tr key={charge.id}>
                                             <Table.Td className="py-4 ps-4">
@@ -652,16 +665,17 @@ function PaymentForm({ charges, onDone }: { charges: Charge[]; onDone: () => voi
                                 Indiquez les montants à affecter. Le reste est conservé comme crédit non affecté.
                             </p>
                         </div>
-                        {charges.filter(charge => charge.paid < charge.amount).length === 0 ? (
+                        {charges.filter(charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0)
+                            .length === 0 ? (
                             <p className="bg-muted/50 text-muted-foreground rounded-lg px-4 py-3 text-sm">
                                 Aucune charge n’a de solde restant à régler.
                             </p>
                         ) : (
                             charges
-                                .filter(charge => charge.paid < charge.amount)
+                                .filter(charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0)
                                 .map(charge => {
                                     const suggested =
-                                        remainingInstallments(charge.schedule, charge.paid).find(
+                                        remainingInstallments(charge.schedule, charge.paid + charge.refunded).find(
                                             item => item.amount > 0,
                                         )?.amount ?? 0;
                                     return (
@@ -669,7 +683,7 @@ function PaymentForm({ charges, onDone }: { charges: Charge[]; onDone: () => voi
                                             key={charge.id}
                                             className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_auto] sm:items-end">
                                             <TextInput
-                                                label={`${charge.title} — reste ${money(charge.amount - charge.paid)}`}
+                                                label={`${charge.title} — reste ${money(remainingChargeAmount(charge.amount, charge.paid, charge.refunded))}`}
                                                 value={amounts[charge.id] ?? ''}
                                                 inputMode="decimal"
                                                 placeholder="0,00"
@@ -925,11 +939,11 @@ function CreditForm({ charges, payment, onDone }: { charges: Charge[]; payment: 
                         </Alert>
                     )}
                     {charges
-                        .filter(charge => charge.paid < charge.amount)
+                        .filter(charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0)
                         .map(charge => (
                             <TextInput
                                 key={charge.id}
-                                label={`${charge.title} — reste ${money(charge.amount - charge.paid)}`}
+                                label={`${charge.title} — reste ${money(remainingChargeAmount(charge.amount, charge.paid, charge.refunded))}`}
                                 inputMode="decimal"
                                 value={amounts[charge.id] ?? ''}
                                 onChange={event => setAmounts({ ...amounts, [charge.id]: event.currentTarget.value })}
@@ -976,11 +990,27 @@ function MetricCard({
     );
 }
 
-function Overview({ charges, payments, ledger = false }: { charges: Charge[]; payments: Payment[]; ledger?: boolean }) {
+function Overview({
+    charges,
+    payments,
+    refunds,
+    ledger = false,
+}: {
+    charges: Charge[];
+    payments: Payment[];
+    refunds: Refund[];
+    ledger?: boolean;
+}) {
     const total = charges.reduce((sum, charge) => sum + charge.amount, 0);
     const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-    const credit = payments.reduce((sum, payment) => sum + payment.amount - payment.allocated, 0);
-    const outstanding = charges.reduce((sum, charge) => sum + charge.amount - charge.paid, 0);
+    const paymentCredit = payments.reduce((sum, payment) => sum + payment.amount - payment.allocated, 0);
+    const refundTotal = refunds.reduce((sum, refund) => sum + refund.amount, 0);
+    const refundCredit = refunds.reduce((sum, refund) => sum + refund.unappliedAmount, 0);
+    const credit = paymentCredit + refundCredit;
+    const outstanding = charges.reduce(
+        (sum, charge) => sum + remainingChargeAmount(charge.amount, charge.paid, charge.refunded),
+        0,
+    );
     const movements = [
         ...charges.map(charge => ({
             id: charge.id,
@@ -996,6 +1026,13 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
             kind: 'Paiement',
             amount: payment.amount,
         })),
+        ...refunds.map(refund => ({
+            id: refund.id,
+            date: refund.date,
+            label: refund.title,
+            kind: 'Remboursement',
+            amount: refund.amount,
+        })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     let running = 0;
     const rows = movements.map(movement => ({ ...movement, balance: (running += movement.amount) }));
@@ -1003,7 +1040,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
     const overdue = charges.reduce(
         (sum, charge) =>
             sum
-            + remainingInstallments(charge.schedule, charge.paid).reduce(
+            + remainingInstallments(charge.schedule, charge.paid + charge.refunded).reduce(
                 (late, item) => late + (item.date < today() ? item.amount : 0),
                 0,
             ),
@@ -1011,7 +1048,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
     );
     const upcoming = charges
         .flatMap(charge =>
-            remainingInstallments(charge.schedule, charge.paid).map(item => ({
+            remainingInstallments(charge.schedule, charge.paid + charge.refunded).map(item => ({
                 id: `${charge.id}-${item.date}`,
                 title: charge.title,
                 date: item.date,
@@ -1033,9 +1070,11 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                 <Card className="flex-row flex-wrap items-center justify-between gap-4" p="lg">
                     <div>
                         <p className="text-muted-foreground text-sm">Solde du compte</p>
-                        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">{money(paid - total)}</p>
+                        <p className="mt-1 font-mono text-2xl font-semibold tabular-nums">
+                            {money(paid - total + refundTotal)}
+                        </p>
                     </div>
-                    <p className="text-muted-foreground text-sm">Paiements − charges</p>
+                    <p className="text-muted-foreground text-sm">Paiements + remboursements − charges</p>
                 </Card>
                 {rows.length === 0 ? (
                     <Card className="items-center py-12 text-center" p="lg">
@@ -1067,7 +1106,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                                         <Table.Tr key={`${row.kind}-${row.id}`}>
                                             <Table.Td className="py-4 ps-4">{displayDate(row.date)}</Table.Td>
                                             <Table.Td>
-                                                <Badge variant={row.kind === 'Paiement' ? 'secondary' : 'outline'}>
+                                                <Badge variant={row.kind === 'Charge' ? 'outline' : 'secondary'}>
                                                     {row.kind}
                                                 </Badge>
                                             </Table.Td>
@@ -1108,11 +1147,11 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                     </>
                 }
             />
-            <section aria-label="Résumé financier" className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+            <section aria-label="Résumé financier" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                     label="Solde du compte"
-                    value={paid - total}
-                    detail="Paiements moins charges"
+                    value={paid - total + refundTotal}
+                    detail="Paiements + remboursements − charges"
                     icon={CircleDollarSign}
                 />
                 <MetricCard
@@ -1124,7 +1163,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                 <MetricCard
                     label="Crédit non affecté"
                     value={credit}
-                    detail="Disponible pour affectation"
+                    detail={`Paiements ${money(paymentCredit)} · remboursements ${money(refundCredit)}`}
                     icon={Wallet}
                 />
                 <MetricCard
@@ -1134,8 +1173,8 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                     icon={Clock3}
                 />
             </section>
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.85fr)]">
-                <Card p="lg" className="min-w-0 gap-4">
+            <div className="grid gap-4 xl:grid-cols-12">
+                <Card p="lg" className="min-w-0 gap-5 xl:col-span-8">
                     <div>
                         <h2 className="font-semibold tracking-tight">Évolution du solde</h2>
                         <p className="text-muted-foreground mt-1 text-sm">
@@ -1175,7 +1214,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                         </div>
                     )}
                 </Card>
-                <Card p="lg" className="gap-4">
+                <Card p="lg" className="min-w-0 gap-4 xl:col-span-4">
                     <div className="flex items-start justify-between gap-3">
                         <div>
                             <h2 className="font-semibold tracking-tight">Échéances à suivre</h2>
@@ -1216,8 +1255,8 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                     </Button>
                 </Card>
             </div>
-            <Card p="sm" className="overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:px-4">
+            <Card p="sm" className="min-w-0 overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-4 sm:px-4">
                     <div>
                         <h2 className="text-sm font-semibold">Derniers mouvements</h2>
                         <p className="text-muted-foreground mt-1 text-xs">Les cinq mouvements les plus récents.</p>
@@ -1244,7 +1283,7 @@ function Overview({ charges, payments, ledger = false }: { charges: Charge[]; pa
                                     <Table.Tr key={`${row.kind}-${row.id}`}>
                                         <Table.Td className="ps-4">{displayDate(row.date)}</Table.Td>
                                         <Table.Td>
-                                            <Badge variant={row.kind === 'Paiement' ? 'secondary' : 'outline'}>
+                                            <Badge variant={row.kind === 'Charge' ? 'outline' : 'secondary'}>
                                                 {row.kind}
                                             </Badge>
                                         </Table.Td>
@@ -1292,6 +1331,11 @@ export function App() {
     const payments = useQuery({
         queryKey: ['payments', session.data?.user.id],
         queryFn: getPayments,
+        enabled: !!session.data,
+    });
+    const refunds = useQuery({
+        queryKey: ['refunds', session.data?.user.id],
+        queryFn: getRefunds,
         enabled: !!session.data,
     });
     const settings = useQuery({
@@ -1423,11 +1467,11 @@ export function App() {
             </aside>
             <main className="min-w-0 p-4 sm:p-6 md:col-start-2 md:row-start-2 md:px-8 md:py-7 lg:px-10">
                 <div className="mx-auto w-full max-w-7xl">
-                    {charges.isError || payments.isError || settings.isError ? (
+                    {charges.isError || payments.isError || refunds.isError || settings.isError ? (
                         <Alert color="red" role="alert">
                             Impossible de charger les données.
                         </Alert>
-                    ) : !charges.data || !payments.data || !settings.data ? (
+                    ) : !charges.data || !payments.data || !refunds.data || !settings.data ? (
                         <div className="text-muted-foreground flex items-center gap-3 py-12 text-sm" role="status">
                             <span className="border-primary size-5 animate-spin rounded-full border-2 border-e-transparent" />
                             Chargement de vos données…
@@ -1437,7 +1481,7 @@ export function App() {
                             <Routes>
                                 <Route
                                     path="/"
-                                    element={<Overview charges={charges.data} payments={payments.data} />}
+                                    element={<Overview charges={charges.data} payments={payments.data} refunds={refunds.data} />}
                                 />
                                 <Route
                                     path="/charges"
@@ -1450,9 +1494,9 @@ export function App() {
                                 />
                                 <Route
                                     path="/ledger"
-                                    element={<Overview charges={charges.data} payments={payments.data} ledger />}
+                                    element={<Overview charges={charges.data} payments={payments.data} refunds={refunds.data} ledger />}
                                 />
-                                <Route path="/import" element={<ImportView />} />
+                                <Route path="/import" element={<ImportView categories={settings.data.categories} />} />
                                 <Route path="*" element={<Navigate to="/" replace />} />
                             </Routes>
                         </Suspense>

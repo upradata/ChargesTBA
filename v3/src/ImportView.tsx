@@ -2,37 +2,50 @@ import { useQueryClient } from '@tanstack/react-query';
 import { hc } from 'hono/client';
 import { CheckCircle2, FileText, Upload } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
 
 import type { AppType } from '../server/app';
-import { MAX_CSV_BYTES, type ImportError, type ImportKind, type ImportRow } from '../server/import-csv';
+import { MAX_CSV_BYTES, type ImportCategory } from '../server/import-csv';
+import type { ImportPreview, ImportProposal } from '../server/import-preview';
 import { displayDate } from '../shared/schedule';
 
 import { PageHeading } from './components/PageHeading';
-import { Alert, Badge, Button, Card, FileInput, Select, Stack, Table, Text } from './components/ui/primitives';
-
-type Preview = {
-    rows: ImportRow[];
-    errors: ImportError[];
-    duplicates: { row: number; marker: string }[];
-    imported: boolean;
-};
+import { Alert, Badge, Button, Card, FileInput, NumberInput, Select, Stack, Table, Text } from './components/ui/primitives';
 const api = hc<AppType>('/');
 const money = (amount: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount / 100);
 
-export function ImportView() {
+const csvFormats = [
+    { separator: ';', label: 'Point-virgule' },
+    { separator: ',', label: 'Virgule' },
+] as const;
+
+export function ImportView({ categories }: { categories: ImportCategory[] }) {
     const client = useQueryClient();
-    const [kind, setKind] = useState<ImportKind>('charges');
     const [file, setFile] = useState<File | null>(null);
     const [csv, setCsv] = useState('');
-    const [preview, setPreview] = useState<Preview | null>(null);
+    const [preview, setPreview] = useState<ImportPreview | null>(null);
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
     const [busy, setBusy] = useState(false);
     const activeStep = preview ? 2 : file ? 1 : 0;
+    const exampleCategory = categories[0]?.name ?? 'Nom exact de votre catégorie';
+    const csvExamples = [
+        ['date', 'libellé', 'crédit', 'débit'],
+        ['31/01/2026', exampleCategory, '', '125,50'],
+        ['01/02/2026', '', '100,00', ''],
+        ['02/02/2026', exampleCategory, '', '-10,00'],
+    ];
 
     async function send(content: string, commit: boolean, approvedDuplicates: string[]) {
-        const res = await api.api.import.$post({ json: { kind, csv: content, commit, approvedDuplicates } });
+        const res = await api.api.import.$post({
+            json: {
+                csv: content,
+                commit,
+                approvedDuplicates,
+                ...(commit && preview ? { snapshot: preview.snapshot, proposals: preview.proposals } : {}),
+            },
+        });
         if (!res.ok) {
             const body: unknown = await res.json();
             throw new Error(
@@ -41,7 +54,7 @@ export function ImportView() {
                     : 'La requête d’import a échoué.',
             );
         }
-        return res.json() as Promise<Preview>;
+        return res.json() as Promise<ImportPreview>;
     }
 
     async function inspect() {
@@ -86,6 +99,7 @@ export function ImportView() {
             await Promise.all([
                 client.invalidateQueries({ queryKey: ['charges'] }),
                 client.invalidateQueries({ queryKey: ['payments'] }),
+                client.invalidateQueries({ queryKey: ['refunds'] }),
                 client.invalidateQueries({ queryKey: ['settings'] }),
             ]);
         } catch (e) {
@@ -93,6 +107,18 @@ export function ImportView() {
         } finally {
             setBusy(false);
         }
+    }
+
+    function updateProposal(row: number, allocations: ImportProposal['allocations']) {
+        setPreview(current =>
+            current
+                ? {
+                      ...current,
+                      errors: current.errors.filter(item => item.column !== 'répartition'),
+                      proposals: current.proposals.map(item => (item.row === row ? { row, allocations } : item)),
+                  }
+                : current,
+        );
     }
 
     return (
@@ -134,25 +160,7 @@ export function ImportView() {
                         </p>
                     </div>
                 </div>
-                <div className="grid gap-4 md:grid-cols-[minmax(14rem,0.7fr)_minmax(0,1.3fr)]">
-                    <Select
-                        label="Contenu du fichier"
-                        value={kind}
-                        disabled={busy}
-                        allowDeselect={false}
-                        data={[
-                            { value: 'charges', label: 'Charges' },
-                            { value: 'payments', label: 'Paiements' },
-                            { value: 'solde', label: 'Solde (charges et paiements)' },
-                        ]}
-                        onChange={value => {
-                            if (value === 'charges' || value === 'payments' || value === 'solde') setKind(value);
-                            setPreview(null);
-                            setCsv('');
-                            setNotice('');
-                            setError('');
-                        }}
-                    />
+                <div className="grid gap-4">
                     <FileInput
                         label="Fichier CSV UTF-8"
                         accept=".csv,text/csv"
@@ -167,6 +175,77 @@ export function ImportView() {
                         }}
                     />
                 </div>
+                <section aria-labelledby="csv-format-title" className="bg-muted/50 grid min-w-0 gap-3 rounded-lg p-4">
+                    <div className="space-y-1">
+                        <h3 id="csv-format-title" className="text-sm font-semibold">
+                            Format du CSV
+                        </h3>
+                        <p className="text-muted-foreground text-sm">
+                            Exactement quatre colonnes : <code>date, libellé, crédit, débit</code>, dans l’ordre
+                            souhaité. Les noms anglais <code>date, label, credit, debit</code> sont aussi acceptés,
+                            sans distinction de casse ou d’accent. Les anciens formats type/amount ne sont plus acceptés.
+                            Utilisez une virgule (,) ou un point-virgule (;) comme séparateur, identique partout.
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                            Dates : <code>JJ/MM/AAAA</code> ou <code>AAAA-MM-JJ</code>. Si le séparateur est une
+                            virgule, mettez les montants à virgule décimale entre guillemets (ex. <code>"125,50"</code>
+                            ).
+                        </p>
+                        <ul className="text-muted-foreground list-disc space-y-1 ps-4 text-sm">
+                            <li>
+                                Un débit positif crée une charge ; un débit négatif crée un remboursement (avoir),
+                                jamais un paiement en espèces.
+                            </li>
+                            <li>
+                                Pour tout débit, le libellé doit correspondre exactement à une catégorie de{' '}
+                                <Link className="text-foreground underline underline-offset-4" to="/settings">
+                                    Paramètres
+                                </Link>
+                                , après suppression des espaces au début et à la fin et passage en minuscules.
+                                Les accents du nom de catégorie restent significatifs.
+                            </li>
+                            <li>
+                                Un crédit positif crée un paiement. Son libellé peut être vide, mais la colonne
+                                libellé reste obligatoire. Un crédit négatif est refusé.
+                            </li>
+                            <li>
+                                Renseignez un seul montant non nul par ligne ; laissez l’autre côté vide ou à zéro.
+                                Montants en euros, deux décimales au maximum, sans symbole ni séparateur de milliers.
+                            </li>
+                        </ul>
+                        <p className="text-muted-foreground text-sm">
+                            Catégories disponibles : {categories.length ? categories.map(item => item.name).join(' · ') : 'aucune — créez une catégorie dans Paramètres avant d’importer des débits.'}
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                            L’aperçu propose d’abord les avoirs sur les charges antérieures de même catégorie, puis
+                            les paiements sur les plus anciennes charges encore dues. Vous pouvez choisir d’autres
+                            charges antérieures ou conserver le crédit non affecté avant de confirmer. Les excédents,
+                            y compris les avoirs, restent inclus dans le solde sans être comptés deux fois.
+                        </p>
+                    </div>
+                    {csvFormats.map(({ separator, label }) => (
+                        <figure key={separator} className="min-w-0 space-y-1">
+                            <figcaption className="text-xs font-medium">
+                                {label} ({separator})
+                            </figcaption>
+                            <pre className="bg-card rounded-md border p-2 text-xs leading-5 break-all whitespace-pre-wrap">
+                                <code>
+                                    {csvExamples
+                                        .map(row =>
+                                            row
+                                                .map(field =>
+                                                    /["\r\n]/.test(field) || field.includes(separator)
+                                                        ? `"${field.replaceAll('"', '""')}"`
+                                                        : field,
+                                                )
+                                                .join(separator),
+                                        )
+                                        .join('\n')}
+                                </code>
+                            </pre>
+                        </figure>
+                    ))}
+                </section>
                 {file && (
                     <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3">
                         <div className="flex min-w-0 items-center gap-3">
@@ -181,8 +260,8 @@ export function ImportView() {
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                     <p className="text-muted-foreground max-w-2xl text-xs leading-5">
-                        L’analyse ne modifie aucune donnée. Les paiements importés restent non affectés jusqu’à leur
-                        répartition.
+                        L’analyse ne modifie aucun mouvement. Vérifiez et ajustez les répartitions proposées avant
+                        toute confirmation.
                     </p>
                     <Button onClick={inspect} disabled={!file} loading={busy}>
                         <Upload aria-hidden="true" /> Analyser le fichier
@@ -227,6 +306,9 @@ export function ImportView() {
                                         Ligne {item.row}, {item.column} : {item.message}
                                     </Text>
                                 ))}
+                                <Link className="underline underline-offset-4" to="/settings">
+                                    Gérer les catégories dans Paramètres
+                                </Link>
                             </Alert>
                         )}
                         {preview.duplicates.length > 0 && (
@@ -245,7 +327,7 @@ export function ImportView() {
                                             <Table.Th>Date</Table.Th>
                                             <Table.Th>Nature</Table.Th>
                                             <Table.Th>Libellé</Table.Th>
-                                            <Table.Th>Type</Table.Th>
+                                            <Table.Th>Catégorie</Table.Th>
                                             <Table.Th className="text-end">Montant</Table.Th>
                                         </Table.Tr>
                                     </Table.Thead>
@@ -254,9 +336,9 @@ export function ImportView() {
                                             <Table.Tr key={row.row}>
                                                 <Table.Td>{row.row}</Table.Td>
                                                 <Table.Td>{displayDate(row.date)}</Table.Td>
-                                                <Table.Td>{row.kind === 'charge' ? 'Charge' : 'Paiement'}</Table.Td>
+                                                <Table.Td>{row.kind === 'charge' ? 'Charge' : row.kind === 'refund' ? 'Remboursement (avoir)' : 'Paiement'}</Table.Td>
                                                 <Table.Td className="max-w-72 truncate">
-                                                    {row.kind === 'charge' ? row.title : (row.label ?? '—')}
+                                                    {row.kind !== 'payment' ? row.title : (row.label ?? '—')}
                                                 </Table.Td>
                                                 <Table.Td>{row.category}</Table.Td>
                                                 <Table.Td className="text-end font-mono tabular-nums">
@@ -272,6 +354,62 @@ export function ImportView() {
                                 Aucune ligne valide à afficher.
                             </p>
                         )}
+                        {preview.proposals.map(proposal => {
+                            const row = preview.rows.find(item => item.row === proposal.row);
+                            if (!row) return null;
+                            const used = proposal.allocations.reduce((sum, item) => sum + item.amount, 0);
+                            const eligible = preview.targets.filter(target => target.date <= row.date);
+                            return (
+                                <section key={proposal.row} aria-labelledby={`allocation-${proposal.row}`} className="space-y-3 rounded-lg border p-3">
+                                    <h3 id={`allocation-${proposal.row}`} className="text-sm font-semibold">
+                                        Ligne {proposal.row} · {row.kind === 'refund' ? 'Avoir' : 'Paiement'} · {money(row.amount)}
+                                    </h3>
+                                    <p className="text-muted-foreground text-xs">
+                                        Non affecté : {money(row.amount - used)}.
+                                        {row.kind === 'refund' ? ' L’avoir réduit la dette, pas le total des paiements reçus.' : ''}
+                                    </p>
+                                    {proposal.allocations.map((allocation, index) => (
+                                        <div key={index} className="grid min-w-0 items-end gap-3 md:grid-cols-[minmax(0,1fr)_10rem_auto]">
+                                            <Select
+                                                label={`Charge · ligne ${proposal.row}, répartition ${index + 1}`}
+                                                value={allocation.target}
+                                                disabled={busy}
+                                                allowDeselect={false}
+                                                data={eligible.map(target => ({
+                                                    value: target.key,
+                                                    label: `${displayDate(target.date)} · ${target.title} · ${money(target.remaining)}`,
+                                                }))}
+                                                onChange={value => {
+                                                    if (!value) return;
+                                                    updateProposal(proposal.row, proposal.allocations.map((item, position) => position === index ? { ...item, target: value } : item));
+                                                }}
+                                            />
+                                            <NumberInput
+                                                label={`Montant (€) · ligne ${proposal.row}, répartition ${index + 1}`}
+                                                min={0.01}
+                                                step={0.01}
+                                                value={allocation.amount / 100}
+                                                disabled={busy}
+                                                onChange={value => updateProposal(proposal.row, proposal.allocations.map((item, position) => position === index ? { ...item, amount: typeof value === 'number' ? Math.round(value * 100) : 0 } : item))}
+                                            />
+                                            <Button variant="outline" disabled={busy} onClick={() => updateProposal(proposal.row, proposal.allocations.filter((_, position) => position !== index))}>
+                                                Retirer
+                                            </Button>
+                                        </div>
+                                    ))}
+                                    <Button
+                                        variant="outline"
+                                        disabled={busy || used >= row.amount || !eligible.some(target => !proposal.allocations.some(item => item.target === target.key))}
+                                        onClick={() => {
+                                            const target = eligible.find(target => !proposal.allocations.some(item => item.target === target.key));
+                                            if (!target) return;
+                                            updateProposal(proposal.row, [...proposal.allocations, { target: target.key, amount: Math.min(row.amount - used, target.remaining) }]);
+                                        }}>
+                                        Ajouter une répartition
+                                    </Button>
+                                </section>
+                            );
+                        })}
                     </div>
                     <div className="bg-muted/30 flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-muted-foreground text-xs leading-5">
