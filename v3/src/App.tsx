@@ -33,13 +33,7 @@ import {
 } from 'recharts';
 
 import type { AppType } from '../server/app';
-import {
-    addMonths,
-    displayDate,
-    makeSchedule,
-    remainingChargeAmount,
-    remainingInstallments,
-} from '../shared/schedule';
+import { addMonths, displayDate, makeSchedule, remainingChargeAmount, remainingInstallments } from '../shared/schedule';
 
 import { AppNavigation, navigationGroups } from './components/AppNavigation';
 import { PageHeading } from './components/PageHeading';
@@ -260,6 +254,7 @@ function Login() {
                                     {...form.getInputProps('email')}
                                 />
                                 <PasswordInput
+                                    key={signup ? 'signup' : 'signin'}
                                     label="Mot de passe"
                                     required
                                     minLength={8}
@@ -554,7 +549,11 @@ function ChargesView({ charges, settings }: { charges: Charge[]; settings: Setti
                             <Table.Tbody>
                                 {charges.map(charge => {
                                     const settled = charge.paid + charge.refunded;
-                                    const remaining = remainingChargeAmount(charge.amount, charge.paid, charge.refunded);
+                                    const remaining = remainingChargeAmount(
+                                        charge.amount,
+                                        charge.paid,
+                                        charge.refunded,
+                                    );
                                     const progress = (settled / charge.amount) * 100;
                                     return (
                                         <Table.Tr key={charge.id}>
@@ -665,14 +664,17 @@ function PaymentForm({ charges, onDone }: { charges: Charge[]; onDone: () => voi
                                 Indiquez les montants à affecter. Le reste est conservé comme crédit non affecté.
                             </p>
                         </div>
-                        {charges.filter(charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0)
-                            .length === 0 ? (
+                        {charges.filter(
+                            charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0,
+                        ).length === 0 ? (
                             <p className="bg-muted/50 text-muted-foreground rounded-lg px-4 py-3 text-sm">
                                 Aucune charge n’a de solde restant à régler.
                             </p>
                         ) : (
                             charges
-                                .filter(charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0)
+                                .filter(
+                                    charge => remainingChargeAmount(charge.amount, charge.paid, charge.refunded) > 0,
+                                )
                                 .map(charge => {
                                     const suggested =
                                         remainingInstallments(charge.schedule, charge.paid + charge.refunded).find(
@@ -1502,7 +1504,13 @@ export function App() {
                                     />
                                     <Route
                                         path="/import"
-                                        element={<ImportView categories={settings.data.categories} />}
+                                        element={
+                                            <ImportView
+                                                categories={settings.data.categories}
+                                                paymentTypes={settings.data.paymentTypes}
+                                                templates={settings.data.templates}
+                                            />
+                                        }
                                     />
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>

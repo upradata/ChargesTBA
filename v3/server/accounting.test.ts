@@ -26,6 +26,9 @@ describe('comptabilité des remboursements', () => {
                 INSERT INTO payments (id, user_id, date, category, amount)
                     VALUES ('p', 'u', '2026-01-02', 'Virement', 200);
                 INSERT INTO allocations VALUES ('a', 'p', 'c', 200);
+                DROP TABLE csv_mapping_rules;
+                DROP TABLE payment_types;
+                DROP TABLE csv_mappings_initialized;
                 DROP TABLE refund_applications;
                 DROP TABLE refunds;
                 PRAGMA user_version = 3;
@@ -33,7 +36,7 @@ describe('comptabilité des remboursements', () => {
             old.sqlite.close();
 
             const migrated = openDatabase(path);
-            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(4);
+            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(5);
             expect(migrated.sqlite.prepare('SELECT amount FROM charges WHERE id = ?').get('c')).toEqual({
                 amount: 1000,
             });
@@ -50,11 +53,13 @@ describe('comptabilité des remboursements', () => {
 
             const reopened = openDatabase(path);
             try {
-                expect(reopened.sqlite.pragma('user_version', { simple: true })).toBe(4);
+                expect(reopened.sqlite.pragma('user_version', { simple: true })).toBe(5);
                 expect(reopened.sqlite.prepare('SELECT amount FROM refunds WHERE id = ?').get('r')).toEqual({
                     amount: 100,
                 });
-                expect(reopened.sqlite.prepare('SELECT amount FROM refund_applications WHERE id = ?').get('ra')).toEqual({
+                expect(
+                    reopened.sqlite.prepare('SELECT amount FROM refund_applications WHERE id = ?').get('ra'),
+                ).toEqual({
                     amount: 100,
                 });
                 expect(reopened.sqlite.pragma('foreign_key_check')).toEqual([]);
@@ -94,9 +99,9 @@ describe('comptabilité des remboursements', () => {
         };
         const owner = await signup('refund-owner@example.com');
         const other = await signup('refund-other@example.com');
-        const settings = (await (
-            await request('/api/settings', 'GET', undefined, owner)
-        ).json()) as { categories: { id: string; name: string }[] };
+        const settings = (await (await request('/api/settings', 'GET', undefined, owner)).json()) as {
+            categories: { id: string; name: string }[];
+        };
         const category = settings.categories[0];
         const created = await request(
             '/api/charges',
@@ -106,9 +111,9 @@ describe('comptabilité des remboursements', () => {
         );
         expect(created.status).toBe(201);
         const { id: chargeId } = (await created.json()) as { id: string };
-        const user = store.sqlite
-            .prepare('SELECT id FROM "user" WHERE email = ?')
-            .get('refund-owner@example.com') as { id: string };
+        const user = store.sqlite.prepare('SELECT id FROM "user" WHERE email = ?').get('refund-owner@example.com') as {
+            id: string;
+        };
         store.sqlite
             .prepare('INSERT INTO payments (id, user_id, date, category, amount) VALUES (?, ?, ?, ?, ?)')
             .run('payment', user.id, '2026-01-02', 'Virement', 2000);

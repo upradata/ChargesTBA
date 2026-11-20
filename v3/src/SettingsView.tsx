@@ -20,6 +20,7 @@ import {
     TextInput,
     Title,
 } from './components/ui/primitives';
+import { CsvMappingSettings } from './CsvMappingSettings';
 
 const api = hc<AppType>('/');
 async function check(res: Response) {
@@ -223,7 +224,14 @@ export function SettingsView({ settings }: { settings: Settings }) {
         void client.invalidateQueries({ queryKey: ['settings'] });
     }
     async function remove(kind: 'category' | 'template', id: string) {
-        if (!window.confirm('Supprimer cet élément ? Les charges existantes ne seront pas modifiées.')) return;
+        if (
+            !window.confirm(
+                kind === 'category'
+                    ? 'Supprimer cette catégorie et ses règles CSV ? Les charges existantes ne seront pas modifiées.'
+                    : 'Supprimer cet échéancier ? Les charges existantes ne seront pas modifiées.',
+            )
+        )
+            return;
         setError('');
         try {
             await check(
@@ -241,7 +249,7 @@ export function SettingsView({ settings }: { settings: Settings }) {
             <PageHeading
                 eyebrow="Configuration"
                 title="Paramètres"
-                description="Personnalisez vos catégories et les échéanciers proposés lors de la saisie des charges."
+                description="Personnalisez vos catégories, échéanciers et correspondances CSV."
             />
             {error && (
                 <Alert color="red" role="alert">
@@ -382,6 +390,7 @@ export function SettingsView({ settings }: { settings: Settings }) {
                     </Card>
                 </section>
             </div>
+            <CsvMappingSettings settings={settings} />
             <Alert>
                 Modifier un échéancier réutilisable ne change pas les échéances déjà enregistrées sur les charges
                 existantes.

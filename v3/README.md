@@ -19,12 +19,35 @@ Open <http://127.0.0.1:5173>, then create a local account. The frontend and
 Hono API bind to loopback only. The Vite+ CLI is installed in this workspace;
 no global installation is needed.
 
+### Temporary tunnel development
+
+If a dev tunnel rewrites the request origin, start the app with its public HTTPS
+origin and the explicitly unsafe development option:
+
+```sh
+APP_ORIGIN='https://YOUR-TUNNEL-5173.euw.devtunnels.ms' pnpm --filter @upradata/charges-tba-v3 dev:unsafe-origins
+```
+
+Replace the URL with the exact tunnel origin. `APP_ORIGIN` remains necessary for
+authentication and secure cookies. This option accepts requests from **every
+origin** and disables CSRF protections: other websites may perform actions as a
+signed-in user. Use only with disposable development data, never in production.
+Stop and restart using the normal `dev` command to restore the protections.
+
 Data and the authentication secret are stored in `v3/.data/`, which is ignored
 by Git. Back up the entire directory while the server is stopped. Password
 recovery and account export are not implemented. The database is **not
 encrypted by the app**; use an encrypted disk and restrict operating-system
 access. Do not expose this development server to the Internet or enter
 production financial data without assessing its security and backup needs.
+
+## Calculate a password hash
+
+From the workspace root, run `node v3/scripts/hash-password.mjs`. Enter a
+password and leave the salt blank to generate a new hash, or enter the salt
+before the colon in an existing `account.password` value to reproduce it.
+Compare the output with the stored value. The password is visible as you type;
+run this locally and do not share passwords or hashes.
 
 ## Current functionality
 
@@ -68,50 +91,49 @@ then inspect the preview before confirming. Data is added to the signed-in
 account only. The file is not retained separately; resulting records remain in
 the local database. No CSV contents are written to the import log.
 
-The first row contains column names, in any order. Names are case-insensitive;
-French aliases `libellé`, `catégorie`, `montant`, `crédit` and `débit` are
-accepted in place of `label`, `type`, `amount`, `credit` and `debit`.
+The first row contains exactly `date`, `label`, `credit` and `debit`, in any
+order. Names are case-insensitive; French aliases `libellé`, `crédit` and
+`débit` are also accepted.
 Use commas or semicolons as separators, and quote fields containing the
 separator, quotes (doubled as `""`), or line breaks. Dates must be `YYYY-MM-DD`
-or `DD/MM/YYYY`. Amounts are positive euros with up to two decimal places,
+or `DD/MM/YYYY`. Amounts are euros with up to two decimal places,
 using a comma or a point; thousands separators and currency symbols are not
 accepted. Quote decimal commas in comma-separated files. Files are limited to
 1,000 data rows and 1,000,000 bytes.
 
-Charge example:
+Statement example:
 
 ```csv
-date;label;type;amount
-31/01/2026;Premier trimestre;Appel de fonds;125,50
+date;libellé;crédit;débit
+31/01/2026;APPEL DE FONDS TRIMESTRIEL;;125,50
+01/02/2026;Virement;100,00;
+02/02/2026;APPEL DE FONDS TRIMESTRIEL;;-10,00
 ```
 
-Each charge has one installment. Payment example:
+Exactly one of credit or debit must be nonzero. Positive debits create charges,
+negative debits create refunds, and positive credits create payments. Payments
+and refunds receive proposed allocations that can be changed before confirmation.
 
-```csv
-date;type;amount
-01/02/2026;Virement;100,00
-```
-
-An optional `label` column is also accepted for payment files. Statement
-(`solde`) example:
-
-```csv
-date;label;type;crédit;débit
-31/01/2026;Premier trimestre;Appel de fonds;;125,50
-01/02/2026;Règlement;Virement;100,00;
-```
-
-Exactly one of credit or debit must be positive in each statement row. Debits
-create charges and credits create payments. The label and type are retained.
-Payments are not automatically allocated; use **Utiliser le crédit** to
-allocate them later.
+In **Paramètres**, payment types and ordered CSV label rules can be added,
+edited and removed. Rules use JavaScript regular-expression patterns without
+slash delimiters; case-insensitive matching is configurable. The first matching
+rule for the movement type wins. Defaults cover quarterly and reserve calls,
+roof and miscellaneous works, the two refund labels in the supplied sample,
+transfers, direct debits and cheques. Unmatched
+payments keep the `Paiement importé` category. Deleting a category or payment
+type also deletes its rules; existing payment records are unchanged.
 
 The preview identifies invalid rows and possible exact duplicates in the file
-or the current account. A charge matches on date, label, type and amount; a
-payment matches on date, type, amount and optional label. Invalid rows block
+or the current account. A charge matches on date, label, category and amount; a
+payment matches on date, amount and optional label. Invalid rows block
 the entire import. Duplicates are not skipped: confirm explicitly to import
 them. Duplicates are checked again at confirmation, and changed matches
-require another review. The import is atomic: a failed import saves no rows.
+require another review. In the statement preview, you can override an automatic
+match for any labeled charge, refund or payment. Unmatched debit labels can use
+an existing category or stage a new one; unmatched payment labels keep the
+default payment category unless you choose a payment type. New categories are
+saved only when the import is confirmed. The import is atomic: a failed import
+saves no rows.
 
 ## Checks
 

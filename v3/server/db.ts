@@ -66,7 +66,7 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
         PRAGMA user_version = 1;
       `);
         })();
-    } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+    } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5) {
         throw new Error(`Version de base de données non prise en charge : ${String(version)}`);
     }
     if (version === 0 || version === 1 || version === 2) {
@@ -113,7 +113,7 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
             sqlite.pragma('user_version = 3');
         })();
     }
-    if (version !== 4) {
+    if (version !== 4 && version !== 5) {
         sqlite.transaction(() => {
             sqlite.exec(`
                 CREATE TABLE refunds (
@@ -132,6 +132,29 @@ export function openDatabase(path = resolve('.data/charges.sqlite')) {
                 CREATE INDEX refund_applications_refund ON refund_applications(refund_id);
                 CREATE INDEX refund_applications_charge ON refund_applications(charge_id);
                 PRAGMA user_version = 4;
+            `);
+        })();
+    }
+    if (version !== 5) {
+        sqlite.transaction(() => {
+            sqlite.exec(`
+                CREATE TABLE payment_types (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL, UNIQUE(user_id, name)
+                );
+                CREATE TABLE csv_mapping_rules (
+                    id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+                    pattern TEXT NOT NULL, ignore_case INTEGER NOT NULL CHECK(ignore_case IN (0, 1)),
+                    position INTEGER NOT NULL,
+                    category_id TEXT REFERENCES categories(id) ON DELETE CASCADE,
+                    payment_type_id TEXT REFERENCES payment_types(id) ON DELETE CASCADE,
+                    CHECK((category_id IS NULL) != (payment_type_id IS NULL))
+                );
+                CREATE INDEX csv_mapping_rules_user ON csv_mapping_rules(user_id, position);
+                CREATE TABLE csv_mappings_initialized (
+                    user_id TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE
+                );
+                PRAGMA user_version = 5;
             `);
         })();
     }

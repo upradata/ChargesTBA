@@ -10,8 +10,15 @@ import { z } from 'zod';
 
 import { addMonths, splitCents, type Installment, type ScheduleRule } from '../shared/schedule';
 
+import {
+    getMappingRules,
+    initializeCsvMappings,
+    matchMappingRules,
+    MAX_MAPPING_RULES,
+    validatePattern,
+} from './csv-mappings';
 import { allocations, charges, payments, type openDatabase } from './db';
-import { MAX_CSV_BYTES } from './import-csv';
+import { MAX_CSV_BYTES, parseImport } from './import-csv';
 import { commitImport, previewImport, validateProposals } from './import-preview';
 
 type Store = ReturnType<typeof openDatabase>;
@@ -38,6 +45,13 @@ const templateInput = z.object({ name: z.string().trim().min(1).max(80), rules: 
 const categoryInput = z.object({
     name: z.string().trim().min(1).max(80),
     defaultScheduleId: z.uuid().nullable(),
+});
+const paymentTypeInput = z.object({ name: z.string().trim().min(1).max(80) });
+const mappingInput = z.object({
+    pattern: z.string().trim().min(1).max(120),
+    ignoreCase: z.boolean(),
+    targetKind: z.enum(['charge', 'payment']),
+    targetId: z.uuid(),
 });
 const chargeInput = z
     .object({
@@ -70,6 +84,20 @@ const paymentInput = paymentEditInput
         value => value.allocations.reduce((sum, item) => sum + item.amount, 0) <= value.amount,
         'La répartition dépasse le paiement',
     );
+const importCategoryResolution = z.discriminatedUnion('kind', [
+    z.object({
+        label: z.string().trim().min(1).max(120),
+        kind: z.literal('existing'),
+        categoryId: z.uuid(),
+        targetKind: z.enum(['charge', 'payment']).optional(),
+    }),
+    z.object({
+        label: z.string().trim().min(1).max(120),
+        kind: z.literal('new'),
+        name: z.string().trim().min(1).max(80),
+        defaultScheduleId: z.uuid().nullable(),
+    }),
+]);
 const allocationInput = z.object({
     allocations: z
         .array(z.object({ chargeId: z.uuid(), amount }))
@@ -80,6 +108,7 @@ const importInput = z.object({
     csv: z.string().max(MAX_CSV_BYTES),
     commit: z.boolean(),
     approvedDuplicates: z.array(z.string().max(100)).max(2000),
+    categoryResolutions: z.array(importCategoryResolution).max(1000).optional(),
     snapshot: z.string().length(64).optional(),
     proposals: z
         .array(
@@ -152,6 +181,7 @@ function initializeSettings(store: Store, userId: string) {
         for (const row of existing) insert.run(randomUUID(), userId, row.category);
         store.sqlite.prepare('INSERT INTO settings_initialized VALUES (?)').run(userId);
     })();
+    initializeCsvMappings(store, userId);
 }
 
 function saveSchedule(store: Store, chargeId: string, schedule: Installment[]) {
@@ -172,22 +202,35 @@ function legacySchedule(data: { date: string; amount: number; installments: numb
 type TemplateRow = { id: string; name: string; rules: string };
 type CategoryRow = { id: string; name: string; defaultScheduleId: string | null };
 
-export function createApp(store: Store, secret: string, origin: string) {
+export function allowAllDevOrigins(env: NodeJS.ProcessEnv) {
+    const value = env.DEV_ALLOW_ALL_ORIGINS;
+    if (value === undefined || value === '0') return false;
+    if (value !== '1') throw new Error('DEV_ALLOW_ALL_ORIGINS doit valoir 0 ou 1.');
+    if (env.NODE_ENV !== 'development') {
+        throw new Error('DEV_ALLOW_ALL_ORIGINS=1 nécessite NODE_ENV=development.');
+    }
+    return true;
+}
+
+export function createApp(store: Store, secret: string, origin: string, allowAllOrigins = false) {
     const auth = betterAuth({
         database: store.sqlite,
         secret,
         baseURL: origin,
         emailAndPassword: { enabled: true },
         trustedOrigins: [origin],
+        ...(allowAllOrigins ? { advanced: { disableCSRFCheck: true } } : {}),
     });
     const app = new Hono();
-    app.use('/api/*', async (c, next) => {
-        if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('origin') !== origin) {
-            return c.json({ error: 'Origine non autorisée' }, 403);
-        }
-        await next();
-    });
-    app.use('/api/*', csrf({ origin }));
+    if (!allowAllOrigins) {
+        app.use('/api/*', async (c, next) => {
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('origin') !== origin) {
+                return c.json({ error: 'Origine non autorisée' }, 403);
+            }
+            await next();
+        });
+        app.use('/api/*', csrf({ origin }));
+    }
     app.use(
         '/api/import',
         bodyLimit({
@@ -210,10 +253,160 @@ export function createApp(store: Store, secret: string, origin: string) {
             const rows = store.sqlite
                 .prepare('SELECT id, name, rules FROM schedule_templates WHERE user_id = ? ORDER BY name')
                 .all(userId) as TemplateRow[];
+            const paymentTypes = store.sqlite
+                .prepare('SELECT id, name FROM payment_types WHERE user_id = ? ORDER BY name')
+                .all(userId) as { id: string; name: string }[];
             return c.json({
                 categories,
                 templates: rows.map(row => ({ ...row, rules: JSON.parse(row.rules) as ScheduleRule[] })),
+                paymentTypes,
+                mappingRules: getMappingRules(store, userId),
             });
+        })
+        .post('/api/payment-types', zValidator('json', paymentTypeInput), async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            initializeSettings(store, session.user.id);
+            const { name } = c.req.valid('json');
+            if (
+                store.sqlite
+                    .prepare('SELECT 1 FROM payment_types WHERE user_id = ? AND name = ? COLLATE NOCASE')
+                    .get(session.user.id, name)
+            )
+                return c.json({ error: 'Ce type de paiement existe déjà' }, 400);
+            const id = randomUUID();
+            store.sqlite.prepare('INSERT INTO payment_types VALUES (?, ?, ?)').run(id, session.user.id, name);
+            return c.json({ id }, 201);
+        })
+        .put('/api/payment-types/:id', zValidator('json', paymentTypeInput), async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const { name } = c.req.valid('json');
+            const id = c.req.param('id');
+            if (
+                store.sqlite
+                    .prepare('SELECT 1 FROM payment_types WHERE user_id = ? AND name = ? COLLATE NOCASE AND id != ?')
+                    .get(session.user.id, name, id)
+            )
+                return c.json({ error: 'Ce type de paiement existe déjà' }, 400);
+            const result = store.sqlite
+                .prepare('UPDATE payment_types SET name = ? WHERE id = ? AND user_id = ?')
+                .run(name, id, session.user.id);
+            if (!result.changes) return c.json({ error: 'Type de paiement introuvable' }, 404);
+            return c.json({ success: true });
+        })
+        .delete('/api/payment-types/:id', async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const result = store.sqlite
+                .prepare('DELETE FROM payment_types WHERE id = ? AND user_id = ?')
+                .run(c.req.param('id'), session.user.id);
+            if (!result.changes) return c.json({ error: 'Type de paiement introuvable' }, 404);
+            return c.json({ success: true });
+        })
+        .post('/api/csv-rules', zValidator('json', mappingInput), async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const userId = session.user.id;
+            initializeSettings(store, userId);
+            const data = c.req.valid('json');
+            if (!validatePattern(data.pattern, data.ignoreCase))
+                return c.json({ error: 'Expression régulière invalide' }, 400);
+            const table = data.targetKind === 'charge' ? 'categories' : 'payment_types';
+            if (!store.sqlite.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND user_id = ?`).get(data.targetId, userId))
+                return c.json({ error: 'Catégorie introuvable' }, 400);
+            const rules = getMappingRules(store, userId);
+            if (rules.length >= MAX_MAPPING_RULES) return c.json({ error: 'Trop de règles CSV' }, 400);
+            if (
+                rules.some(
+                    rule =>
+                        rule.pattern === data.pattern
+                        && rule.ignoreCase === data.ignoreCase
+                        && (data.targetKind === 'charge' ? rule.categoryId : rule.paymentTypeId),
+                )
+            )
+                return c.json({ error: 'Cette expression existe déjà pour ce type de mouvement' }, 400);
+            const id = randomUUID();
+            store.sqlite
+                .prepare('INSERT INTO csv_mapping_rules VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .run(
+                    id,
+                    userId,
+                    data.pattern,
+                    Number(data.ignoreCase),
+                    rules.length ? Math.max(...rules.map(rule => rule.position)) + 1 : 0,
+                    data.targetKind === 'charge' ? data.targetId : null,
+                    data.targetKind === 'payment' ? data.targetId : null,
+                );
+            return c.json({ id }, 201);
+        })
+        .put(
+            '/api/csv-rules/order',
+            zValidator('json', z.object({ ids: z.array(z.uuid()).max(MAX_MAPPING_RULES) })),
+            async c => {
+                const session = await auth.api.getSession({ headers: c.req.raw.headers });
+                if (!session) return c.json({ error: 'Non authentifié' }, 401);
+                const ids = c.req.valid('json').ids;
+                const rules = getMappingRules(store, session.user.id);
+                if (
+                    ids.length !== rules.length
+                    || new Set(ids).size !== ids.length
+                    || ids.some(id => !rules.some(rule => rule.id === id))
+                )
+                    return c.json({ error: 'Ordre des règles invalide' }, 400);
+                store.sqlite.transaction(() => {
+                    const update = store.sqlite.prepare(
+                        'UPDATE csv_mapping_rules SET position = ? WHERE id = ? AND user_id = ?',
+                    );
+                    ids.forEach((id, position) => update.run(position, id, session.user.id));
+                })();
+                return c.json({ success: true });
+            },
+        )
+        .put('/api/csv-rules/:id', zValidator('json', mappingInput), async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const userId = session.user.id;
+            const data = c.req.valid('json');
+            if (!validatePattern(data.pattern, data.ignoreCase))
+                return c.json({ error: 'Expression régulière invalide' }, 400);
+            const table = data.targetKind === 'charge' ? 'categories' : 'payment_types';
+            if (!store.sqlite.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND user_id = ?`).get(data.targetId, userId))
+                return c.json({ error: 'Catégorie introuvable' }, 400);
+            const id = c.req.param('id');
+            if (
+                getMappingRules(store, userId).some(
+                    rule =>
+                        rule.id !== id
+                        && rule.pattern === data.pattern
+                        && rule.ignoreCase === data.ignoreCase
+                        && (data.targetKind === 'charge' ? rule.categoryId : rule.paymentTypeId),
+                )
+            )
+                return c.json({ error: 'Cette expression existe déjà pour ce type de mouvement' }, 400);
+            const result = store.sqlite
+                .prepare(
+                    'UPDATE csv_mapping_rules SET pattern = ?, ignore_case = ?, category_id = ?, payment_type_id = ? WHERE id = ? AND user_id = ?',
+                )
+                .run(
+                    data.pattern,
+                    Number(data.ignoreCase),
+                    data.targetKind === 'charge' ? data.targetId : null,
+                    data.targetKind === 'payment' ? data.targetId : null,
+                    id,
+                    userId,
+                );
+            if (!result.changes) return c.json({ error: 'Règle introuvable' }, 404);
+            return c.json({ success: true });
+        })
+        .delete('/api/csv-rules/:id', async c => {
+            const session = await auth.api.getSession({ headers: c.req.raw.headers });
+            if (!session) return c.json({ error: 'Non authentifié' }, 401);
+            const result = store.sqlite
+                .prepare('DELETE FROM csv_mapping_rules WHERE id = ? AND user_id = ?')
+                .run(c.req.param('id'), session.user.id);
+            if (!result.changes) return c.json({ error: 'Règle introuvable' }, 404);
+            return c.json({ success: true });
         })
         .post('/api/categories', zValidator('json', categoryInput), async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });
@@ -329,25 +522,56 @@ export function createApp(store: Store, secret: string, origin: string) {
         .post('/api/import', zValidator('json', importInput), async c => {
             const session = await auth.api.getSession({ headers: c.req.raw.headers });
             if (!session) return c.json({ error: 'Non authentifié' }, 401);
-            const { csv, commit, approvedDuplicates, snapshot, proposals } = c.req.valid('json');
+            const {
+                csv,
+                commit,
+                approvedDuplicates,
+                categoryResolutions = [],
+                snapshot,
+                proposals,
+            } = c.req.valid('json');
             initializeSettings(store, session.user.id);
+            const labels = new Map<string, { label: string; kind: 'charge' | 'payment' }>();
+            parseImport(csv, [], [], {
+                onLabel: item => labels.set(`${item.kind}:${item.label}`, { label: item.label, kind: item.kind }),
+            });
             try {
-                const result = store.sqlite.transaction(() => {
-                    const preview = previewImport(store, session.user.id, csv);
-                    if (
-                        !commit
-                        || preview.errors.length
-                        || snapshot !== preview.snapshot
-                        || !proposals
-                        || preview.duplicates.some(item => !approvedDuplicates.includes(item.marker))
-                    )
-                        return preview;
-                    const errors = validateProposals(preview, proposals);
-                    if (errors.length) return { ...preview, proposals, errors };
-                    commitImport(store, session.user.id, preview, proposals);
-                    return { ...preview, proposals, imported: true };
-                })();
-                return c.json(result);
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    const rules = getMappingRules(store, session.user.id);
+                    let matches;
+                    try {
+                        matches = await matchMappingRules(rules, [...labels.values()]);
+                    } catch (error) {
+                        console.error('Échec de la vérification des règles CSV.');
+                        return c.json(
+                            {
+                                error:
+                                    error instanceof Error ? error.message : 'Vérification des règles CSV impossible.',
+                            },
+                            400,
+                        );
+                    }
+                    const result = store.sqlite.transaction(() => {
+                        if (JSON.stringify(rules) !== JSON.stringify(getMappingRules(store, session.user.id)))
+                            return null;
+                        const preview = previewImport(store, session.user.id, csv, categoryResolutions, matches);
+                        if (
+                            !commit
+                            || preview.errors.length
+                            || preview.unresolvedCategories.length
+                            || snapshot !== preview.snapshot
+                            || !proposals
+                            || preview.duplicates.some(item => !approvedDuplicates.includes(item.marker))
+                        )
+                            return preview;
+                        const errors = validateProposals(preview, proposals);
+                        if (errors.length) return { ...preview, proposals, errors };
+                        commitImport(store, session.user.id, preview, proposals, categoryResolutions);
+                        return { ...preview, proposals, imported: true };
+                    })();
+                    if (result) return c.json(result);
+                }
+                return c.json({ error: 'Les règles CSV ont changé. Relancez l’analyse.' }, 409);
             } catch {
                 console.error('Échec de la transaction d’import CSV.');
                 return c.json({ error: 'Import impossible. Aucune ligne n’a été enregistrée.' }, 500);
@@ -432,7 +656,9 @@ export function createApp(store: Store, secret: string, origin: string) {
             })();
             if (!result)
                 return c.json(
-                    { error: 'Charge introuvable, montant inférieur aux sommes affectées ou catégorie déjà remboursée' },
+                    {
+                        error: 'Charge introuvable, montant inférieur aux sommes affectées ou catégorie déjà remboursée',
+                    },
                     400,
                 );
             return c.json({ success: true });

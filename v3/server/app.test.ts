@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
-import { createApp } from './app';
+import { allowAllDevOrigins, createApp } from './app';
 import { openDatabase } from './db';
 
 const origin = 'http://127.0.0.1:5173';
@@ -10,6 +10,54 @@ afterEach(() => {
 });
 
 describe('API locale', () => {
+    it('active le contournement des origines uniquement en développement explicite', () => {
+        expect(allowAllDevOrigins({})).toBe(false);
+        expect(allowAllDevOrigins({ NODE_ENV: 'development' })).toBe(false);
+        expect(allowAllDevOrigins({ NODE_ENV: 'development', DEV_ALLOW_ALL_ORIGINS: '1' })).toBe(true);
+        expect(() => allowAllDevOrigins({ NODE_ENV: 'production', DEV_ALLOW_ALL_ORIGINS: '1' })).toThrow();
+        expect(() => allowAllDevOrigins({ DEV_ALLOW_ALL_ORIGINS: '1' })).toThrow();
+        expect(() => allowAllDevOrigins({ NODE_ENV: 'development', DEV_ALLOW_ALL_ORIGINS: 'true' })).toThrow();
+    });
+
+    it('autorise la connexion et les écritures depuis une autre origine uniquement avec le contournement', async () => {
+        const store = openDatabase(':memory:');
+        stores.push(store);
+        const publicOrigin = 'https://tunnel.example.com';
+        const forwardedOrigin = 'http://localhost:5173';
+        const secret = 'a-long-random-secret-for-testing-only-12345';
+        const { app } = createApp(store, secret, publicOrigin, true);
+        const signInBody = { email: 'origin-test@example.com', password: 'a-secure-password' };
+        const request = (path: string, body: unknown, cookie?: string) =>
+            app.request(path, {
+                method: 'POST',
+                headers: {
+                    'origin': forwardedOrigin,
+                    'content-type': 'application/json',
+                    ...(cookie ? { cookie } : {}),
+                },
+                body: JSON.stringify(body),
+            });
+        const signup = await request('/api/auth/sign-up/email', { ...signInBody, name: 'Test' });
+        expect(signup.status).toBe(200);
+        const login = await request('/api/auth/sign-in/email', signInBody);
+        expect(login.status).toBe(200);
+        const cookies = login.headers.getSetCookie();
+        expect(cookies.some(value => value.startsWith('__Secure-') && value.includes('Secure'))).toBe(true);
+        const cookie = cookies.map(value => value.split(';')[0]).join('; ');
+        expect(cookie).not.toBe('');
+        const write = await request('/api/categories', { name: 'Tunnel', defaultScheduleId: null }, cookie);
+        expect(write.status).toBe(201);
+        expect((await request('/api/categories', { name: 'Sans session', defaultScheduleId: null })).status).toBe(401);
+
+        const secured = createApp(store, secret, publicOrigin);
+        const rejected = await secured.app.request('/api/auth/sign-in/email', {
+            method: 'POST',
+            headers: { 'origin': forwardedOrigin, 'content-type': 'application/json' },
+            body: JSON.stringify(signInBody),
+        });
+        expect(rejected.status).toBe(403);
+    });
+
     it('migre les échéances historiques sans modifier les paiements affectés', () => {
         const directory = mkdtempSync(join(tmpdir(), 'charges-migration-'));
         const path = join(directory, 'db.sqlite');
@@ -26,7 +74,7 @@ describe('API locale', () => {
                 .run('p', 'u', '2024-02-01', 'Virement', 200);
             old.sqlite.prepare('INSERT INTO allocations VALUES (?, ?, ?, ?)').run('a', 'p', 'c', 200);
             old.sqlite.exec(
-                'DROP TABLE refund_applications; DROP TABLE refunds; DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; ALTER TABLE payments DROP COLUMN label; PRAGMA user_version = 1',
+                'DROP TABLE csv_mapping_rules; DROP TABLE payment_types; DROP TABLE csv_mappings_initialized; DROP TABLE refund_applications; DROP TABLE refunds; DROP TABLE charge_installments; DROP TABLE categories; DROP TABLE schedule_templates; DROP TABLE settings_initialized; ALTER TABLE payments DROP COLUMN label; PRAGMA user_version = 1',
             );
             old.sqlite.close();
             const migrated = openDatabase(path);
@@ -42,7 +90,7 @@ describe('API locale', () => {
             expect(migrated.sqlite.prepare('SELECT amount FROM allocations WHERE id = ?').get('a')).toEqual({
                 amount: 200,
             });
-            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(4);
+            expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(5);
             migrated.sqlite.close();
         } finally {
             rmSync(directory, { recursive: true, force: true });
@@ -60,6 +108,9 @@ describe('API locale', () => {
                     INSERT INTO charges VALUES ('c', 'u', 'Charge', 'Test', '2024-01-31', 1000, 2);
                     INSERT INTO payments (id, user_id, date, category, amount, label)
                         VALUES ('p', 'u', '2024-02-01', 'Virement', 200, 'Libellé');
+                    DROP TABLE csv_mapping_rules;
+                    DROP TABLE payment_types;
+                    DROP TABLE csv_mappings_initialized;
                     DROP TABLE refund_applications;
                     DROP TABLE refunds;
                 `);
@@ -74,7 +125,7 @@ describe('API locale', () => {
                 old.sqlite.pragma('user_version = 2');
                 old.sqlite.close();
                 const migrated = openDatabase(path);
-                expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(4);
+                expect(migrated.sqlite.pragma('user_version', { simple: true })).toBe(5);
                 expect(migrated.sqlite.prepare('SELECT label FROM payments').get()).toEqual({
                     label: variant === 'imports' ? 'Libellé' : null,
                 });
