@@ -8,6 +8,7 @@
         "dev": "concurrently -k \"pnpm dev:server\" \"tsx server/wait-for-api.ts && pnpm dev:client\"",
         "dev:client": "vp dev",
         "dev:server": "tsx watch server/index.ts",
+        "dev:unsafe-origins": "NODE_ENV=development DEV_ALLOW_ALL_ORIGINS=1 pnpm dev",
         "test": "vp test run",
         "typecheck": "tsc --noEmit"
     },
