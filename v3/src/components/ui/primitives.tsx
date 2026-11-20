@@ -1,8 +1,11 @@
 import { Slottable } from '@radix-ui/react-slot';
+import { cn } from 'cn';
+import { Eye, EyeOff, Upload } from 'lucide-react';
 import {
     useEffect,
     useId,
     useRef,
+    useState,
     type ChangeEvent,
     type ComponentProps,
     type CSSProperties,
@@ -216,13 +219,28 @@ type FieldProps = ComponentProps<typeof Input> & {
     description?: string;
 };
 
-export function TextInput({ label, description, className, id, ...props }: FieldProps) {
+export function TextInput({
+    label,
+    description,
+    className,
+    id,
+    endAction,
+    ...props
+}: FieldProps & { endAction?: ReactNode }) {
     const generatedId = useId();
     const inputId = id ?? generatedId;
     return (
         <div className={`grid min-w-0 flex-1 gap-1.5 ${className ?? ''}`}>
             {label && <Label htmlFor={inputId}>{label}</Label>}
-            <Input id={inputId} aria-describedby={description ? `${inputId}-description` : undefined} {...props} />
+            <div className={endAction ? 'relative' : undefined}>
+                <Input
+                    id={inputId}
+                    aria-describedby={description ? `${inputId}-description` : undefined}
+                    className={endAction ? 'pe-11' : undefined}
+                    {...props}
+                />
+                {endAction && <div className="absolute inset-y-0 end-1 flex items-center">{endAction}</div>}
+            </div>
             {description && (
                 <p id={`${inputId}-description`} className="text-muted-foreground text-sm">
                     {description}
@@ -233,7 +251,25 @@ export function TextInput({ label, description, className, id, ...props }: Field
 }
 
 export function PasswordInput(props: FieldProps) {
-    return <TextInput type="password" {...props} />;
+    const [visible, setVisible] = useState(false);
+    return (
+        <TextInput
+            {...props}
+            type={visible ? 'text' : 'password'}
+            endAction={
+                <Button
+                    type="button"
+                    variant="subtle"
+                    size="icon-sm"
+                    disabled={props.disabled}
+                    aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-pressed={visible}
+                    onClick={() => setVisible(current => !current)}>
+                    {visible ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </Button>
+            }
+        />
+    );
 }
 
 type NumberInputProps = Omit<ComponentProps<'input'>, 'onChange' | 'type' | 'value'> & {
@@ -339,20 +375,29 @@ type FileInputProps = Omit<ComponentProps<'input'>, 'type' | 'value' | 'onChange
 export function FileInput({ label, onChange, ...props }: FileInputProps) {
     const id = useId();
     const input = useRef<HTMLInputElement>(null);
-    const { value, ...inputProps } = props;
+    const { value, className, ...inputProps } = props;
     useEffect(() => {
         if (!value && input.current) input.current.value = '';
     }, [value]);
     return (
         <div className="grid gap-1.5">
             {label && <Label htmlFor={id}>{label}</Label>}
-            <Input
-                {...inputProps}
-                ref={input}
-                id={id}
-                type="file"
-                onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.currentTarget.files?.[0] ?? null)}
-            />
+            <div className="relative has-disabled:cursor-not-allowed">
+                <Input
+                    {...inputProps}
+                    className={cn('peer ps-9 enabled:cursor-pointer enabled:file:cursor-pointer', className)}
+                    ref={input}
+                    id={id}
+                    type="file"
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        onChange(event.currentTarget.files?.[0] ?? null)
+                    }
+                />
+                <Upload
+                    aria-hidden="true"
+                    className="text-muted-foreground pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 peer-disabled:opacity-50"
+                />
+            </div>
         </div>
     );
 }
