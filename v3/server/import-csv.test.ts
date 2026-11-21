@@ -25,6 +25,7 @@ describe('analyse CSV', () => {
             ],
             errors: [],
             unresolvedCategories: [],
+            pendingRows: [],
         });
         expect(parse('date,credit,debit,label\n2026-02-01,12.30,,Test').rows).toEqual([
             { row: 2, kind: 'payment', date: '2026-02-01', category: 'Paiement importé', amount: 1230, label: 'Test' },
@@ -86,6 +87,9 @@ describe('analyse CSV', () => {
         expect(parse('date;label;credit;debit\n2026-01-01;;;1').errors[0].column).toBe('libellé');
         expect(parse('date;label;credit;debit\n2026-01-01;Inconnu;;1').unresolvedCategories).toEqual([
             { label: 'Inconnu', rows: [2] },
+        ]);
+        expect(parse('date;label;credit;debit\n2026-01-01;Inconnu;;1,50').pendingRows).toEqual([
+            { row: 2, kind: 'charge', date: '2026-01-01', title: 'Inconnu', amount: 150 },
         ]);
         expect(parse('date;label;credit;debit\n2026-01-01;Fonds supplément;;1').unresolvedCategories).toEqual([
             { label: 'Fonds supplément', rows: [2] },

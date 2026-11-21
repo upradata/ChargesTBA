@@ -10,6 +10,7 @@ import {
     type ImportCategoryResolution,
     type ImportError,
     type ImportRow,
+    type PendingRow,
 } from './import-csv';
 
 type Store = ReturnType<typeof openDatabase>;
@@ -26,6 +27,7 @@ export type ImportPreview = {
     rows: ImportRow[];
     errors: ImportError[];
     unresolvedCategories: { label: string; rows: number[] }[];
+    pendingRows: PendingRow[];
     categoryLabels: { label: string; rows: number[]; targetKind: MappingKind }[];
     duplicates: { row: number; marker: string }[];
     targets: ImportTarget[];

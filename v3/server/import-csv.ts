@@ -19,6 +19,7 @@ export type ImportCategoryResolution =
     | { label: string; kind: 'existing'; categoryId: string; targetKind?: MappingKind }
     | { label: string; kind: 'new'; name: string; defaultScheduleId: string | null };
 export type UnresolvedCategory = { label: string; rows: number[] };
+export type PendingRow = { row: number; kind: 'charge' | 'refund'; date: string; title: string; amount: number };
 export type ImportError = { row: number; column: string; message: string };
 export const MAX_CSV_BYTES = 1_000_000;
 export const MAX_CSV_ROWS = 1000;
@@ -157,9 +158,15 @@ export function parseImport(
         matches?: MappingMatch[];
         onLabel?: (item: MappingLabel & { row: number }) => void;
     } = {},
-): { rows: ImportRow[]; errors: ImportError[]; unresolvedCategories: UnresolvedCategory[] } {
+): {
+    rows: ImportRow[];
+    errors: ImportError[];
+    unresolvedCategories: UnresolvedCategory[];
+    pendingRows: PendingRow[];
+} {
     const errors: ImportError[] = [];
     const rows: ImportRow[] = [];
+    const pendingRows: PendingRow[] = [];
     const unresolvedCategories = new Map<string, UnresolvedCategory>();
     const resolutions = new Map(
         categoryResolutions.map(item => [
@@ -174,6 +181,7 @@ export function parseImport(
             rows,
             errors: [{ row: 0, column: 'fichier', message: 'Fichier trop volumineux.' }],
             unresolvedCategories: [],
+            pendingRows,
         };
 
     let parsed: ReturnType<typeof csvRows>;
@@ -185,13 +193,19 @@ export function parseImport(
             rows,
             errors: [{ row: 0, column: 'fichier', message: error instanceof Error ? error.message : 'CSV invalide.' }],
             unresolvedCategories: [],
+            pendingRows,
         };
     }
 
     const header = parsed[0];
 
     if (!header)
-        return { rows, errors: [{ row: 1, column: 'en-tête', message: 'Fichier vide.' }], unresolvedCategories: [] };
+        return {
+            rows,
+            errors: [{ row: 1, column: 'en-tête', message: 'Fichier vide.' }],
+            unresolvedCategories: [],
+            pendingRows,
+        };
 
     const names = header.fields.map(value => aliases[headerName(value)] ?? headerName(value));
     const required = ['date', 'label', 'credit', 'debit'];
@@ -209,6 +223,7 @@ export function parseImport(
                 },
             ],
             unresolvedCategories: [],
+            pendingRows,
         };
     }
 
@@ -217,6 +232,7 @@ export function parseImport(
             rows,
             errors: [{ row: 0, column: 'fichier', message: 'Aucune ligne de données.' }],
             unresolvedCategories: [],
+            pendingRows,
         };
 
     for (const entry of parsed.slice(1)) {
@@ -298,6 +314,7 @@ export function parseImport(
             const unresolved = unresolvedCategories.get(key) ?? { label: label.trim(), rows: [] };
             unresolved.rows.push(entry.row);
             unresolvedCategories.set(key, unresolved);
+            pendingRows.push({ row: entry.row, kind: rowKind, date, title: label, amount });
 
             continue;
         }
@@ -323,5 +340,5 @@ export function parseImport(
             });
     }
 
-    return { rows, errors, unresolvedCategories: [...unresolvedCategories.values()] };
+    return { rows, errors, unresolvedCategories: [...unresolvedCategories.values()], pendingRows };
 }
