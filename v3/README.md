@@ -128,12 +128,18 @@ or the current account. A charge matches on date, label, category and amount; a
 payment matches on date, amount and optional label. Invalid rows block
 the entire import. Duplicates are not skipped: confirm explicitly to import
 them. Duplicates are checked again at confirmation, and changed matches
-require another review. In the statement preview, you can override an automatic
-match for any labeled charge, refund or payment. Unmatched debit labels can use
-an existing category or stage a new one; unmatched payment labels keep the
-default payment category unless you choose a payment type. New categories are
-saved only when the import is confirmed. The import is atomic: a failed import
-saves no rows.
+require another review. Preview lines are numbered from 1, not counting the
+header. In the preview table, use the edit button in the **Catégorie** column to
+override an automatic match for any labeled charge, refund or payment; the
+choice applies to every line with the same label. Unmatched debit labels are
+shown as **À définir** and can use an existing category or stage a new one;
+unmatched payment labels keep the default payment category unless you choose a
+payment type. New categories are saved only when the import is confirmed. To
+change an allocation, select the button next to a payment or refund amount:
+only unpaid charges dated on or before it remain visible (same category for
+refunds), including existing charges. Tick charges and adjust amounts, then
+select **OK** in the bottom bar. The import is atomic: a failed import saves no
+rows.
 
 ## Checks
 
