@@ -16,6 +16,14 @@ import { Alert as ShadcnAlert, AlertDescription, AlertTitle } from './alert';
 import { Badge as ShadcnBadge } from './badge';
 import { Button as ShadcnButton } from './button';
 import { Card as ShadcnCard } from './card';
+import {
+    Dialog as ShadcnDialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from './dialog';
 import { Input } from './input';
 import { Label } from './label';
 import { Progress as ShadcnProgress } from './progress';
@@ -449,3 +457,37 @@ const Table = Object.assign(ShadcnTable, {
 });
 
 export { Table };
+
+function Dialog({
+    open,
+    onClose,
+    title,
+    description,
+    footer,
+    className,
+    children,
+}: {
+    open: boolean;
+    onClose: () => void;
+    title: ReactNode;
+    description?: ReactNode;
+    footer?: ReactNode;
+    className?: string;
+    children: ReactNode;
+}) {
+    return (
+        <ShadcnDialog open={open} onOpenChange={next => !next && onClose()}>
+            <DialogContent className={cn('max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]', className)}>
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                    {description && <DialogDescription>{description}</DialogDescription>}
+                </DialogHeader>
+                <div className="min-h-0 overflow-y-auto">{children}</div>
+                {footer && <DialogFooter>{footer}</DialogFooter>}
+            </DialogContent>
+        </ShadcnDialog>
+    );
+}
+
+export { Checkbox } from './checkbox';
+export { Dialog };
