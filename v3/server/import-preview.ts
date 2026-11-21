@@ -100,6 +100,7 @@ export function previewImport(
     csv: string,
     categoryResolutions: ImportCategoryResolution[] = [],
     matches: MappingMatch[] = [],
+    pinned: ImportProposal[] = [],
 ): ImportPreview {
     const categories = store.sqlite
         .prepare('SELECT id, name FROM categories WHERE user_id = ? ORDER BY id')
@@ -200,21 +201,40 @@ export function previewImport(
             })),
     ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
     const capacity = new Map(targets.map(target => [target.key, target.remaining]));
+    const targetByKey = new Map(targets.map(target => [target.key, target]));
+    const eligible = (row: ImportRow, target: ImportTarget) =>
+        target.date <= row.date
+        && (row.kind !== 'refund' || target.category.trim().toLowerCase() === row.category.trim().toLowerCase());
     const funding = parsed.rows
         .filter(row => row.kind !== 'charge')
         .sort((a, b) => {
             const priority = Number(b.kind === 'refund') - Number(a.kind === 'refund');
             return priority || a.date.localeCompare(b.date) || a.row - b.row;
         });
+    const kept = new Map<number, ImportAllocation[]>();
+    for (const row of funding) {
+        const proposal = pinned.find(item => item.row === row.row);
+        if (!proposal) continue;
+        let remaining = row.amount;
+        const allocations: ImportAllocation[] = [];
+        for (const allocation of proposal.allocations) {
+            const target = targetByKey.get(allocation.target);
+            if (!target || !eligible(row, target) || allocations.some(item => item.target === target.key)) continue;
+            const amount = Math.min(allocation.amount, remaining, capacity.get(target.key) ?? 0);
+            if (amount <= 0) continue;
+            allocations.push({ target: target.key, amount });
+            capacity.set(target.key, (capacity.get(target.key) ?? 0) - amount);
+            remaining -= amount;
+        }
+        kept.set(row.row, allocations);
+    }
     const proposals = funding.map(row => {
+        const fixed = kept.get(row.row);
+        if (fixed) return { row: row.row, allocations: fixed };
         let remaining = row.amount;
         const allocations: ImportAllocation[] = [];
         for (const target of targets) {
-            if (
-                target.date > row.date
-                || (row.kind === 'refund' && target.category.trim().toLowerCase() !== row.category.trim().toLowerCase())
-            )
-                continue;
+            if (!eligible(row, target)) continue;
             const amount = Math.min(remaining, capacity.get(target.key) ?? 0);
             if (amount <= 0) continue;
             allocations.push({ target: target.key, amount });

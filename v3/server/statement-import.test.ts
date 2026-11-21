@@ -88,6 +88,43 @@ describe('statement refunds and editable import allocations', () => {
         expect((await preview(csv)).duplicates).toHaveLength(3);
     });
 
+    it('keeps pinned allocations when the preview is recomputed', async () => {
+        const { request, cookie } = await setup();
+        const csv = `${header}\n2026-01-01;${category};;10\n2026-01-02;${category};;20\n2026-01-04;;30;\n2026-01-05;;30;`;
+        const result = await request(
+            '/api/import',
+            'POST',
+            {
+                csv,
+                commit: false,
+                approvedDuplicates: [],
+                pinnedProposals: [
+                    {
+                        row: 5,
+                        allocations: [
+                            { target: 'row:3', amount: 1500 },
+                            { target: 'row:99', amount: 100 },
+                            { target: 'row:3', amount: 100 },
+                            { target: 'row:2', amount: 9999 },
+                        ],
+                    },
+                ],
+            },
+            cookie,
+        );
+        const after = (await result.json()) as ImportPreview;
+        expect(after.proposals).toEqual([
+            { row: 4, allocations: [{ target: 'row:3', amount: 500 }] },
+            {
+                row: 5,
+                allocations: [
+                    { target: 'row:3', amount: 1500 },
+                    { target: 'row:2', amount: 1000 },
+                ],
+            },
+        ]);
+    });
+
     it('allows another charge or no allocation and keeps unapplied category credit', async () => {
         const { store, preview, commit } = await setup();
         const csv = `${header}\n2026-01-01;${category};;10\n2026-01-02;${category};;20\n2026-01-03;${category};;-40\n2026-01-04;;50;`;

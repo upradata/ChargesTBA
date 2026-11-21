@@ -104,21 +104,22 @@ const allocationInput = z.object({
         .min(1)
         .max(100),
 });
+const importProposals = z
+    .array(
+        z.object({
+            row: z.number().int().positive(),
+            allocations: z.array(z.object({ target: z.string().max(100), amount })).max(1000),
+        }),
+    )
+    .max(1000);
 const importInput = z.object({
     csv: z.string().max(MAX_CSV_BYTES),
     commit: z.boolean(),
     approvedDuplicates: z.array(z.string().max(100)).max(2000),
     categoryResolutions: z.array(importCategoryResolution).max(1000).optional(),
     snapshot: z.string().length(64).optional(),
-    proposals: z
-        .array(
-            z.object({
-                row: z.number().int().positive(),
-                allocations: z.array(z.object({ target: z.string().max(100), amount })).max(1000),
-            }),
-        )
-        .max(1000)
-        .optional(),
+    proposals: importProposals.optional(),
+    pinnedProposals: importProposals.optional(),
 });
 
 function canAllocate(store: Store, userId: string, requested: { chargeId: string; amount: number }[]) {
@@ -529,6 +530,7 @@ export function createApp(store: Store, secret: string, origin: string, allowAll
                 categoryResolutions = [],
                 snapshot,
                 proposals,
+                pinnedProposals = [],
             } = c.req.valid('json');
             initializeSettings(store, session.user.id);
             const labels = new Map<string, { label: string; kind: 'charge' | 'payment' }>();
@@ -554,7 +556,14 @@ export function createApp(store: Store, secret: string, origin: string, allowAll
                     const result = store.sqlite.transaction(() => {
                         if (JSON.stringify(rules) !== JSON.stringify(getMappingRules(store, session.user.id)))
                             return null;
-                        const preview = previewImport(store, session.user.id, csv, categoryResolutions, matches);
+                        const preview = previewImport(
+                            store,
+                            session.user.id,
+                            csv,
+                            categoryResolutions,
+                            matches,
+                            pinnedProposals,
+                        );
                         if (
                             !commit
                             || preview.errors.length
